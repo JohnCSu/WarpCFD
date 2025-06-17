@@ -1,6 +1,6 @@
 import numpy as np
 import warp as wp
-from src.preprocess.mesh import Mesh
+from warp_cfd.preprocess.mesh import Mesh
 import pyvista as pv
 from pyvista import CellType
 

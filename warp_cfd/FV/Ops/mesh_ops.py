@@ -1,26 +1,23 @@
-from .interpolation import central_difference,upwind
+from warp_cfd.FV.Ops.interpolation import central_difference,upwind
 import warp as wp
 from typing import Any
+from .ops_class import Ops
+class Mesh_Ops(Ops):
+    '''
+    Object Responsible For:
 
+    Initial Step of compiling functions for the following steps:
+        - Apply BC and Cell Value
+        - Face Interpolation 
+        - Calculate Mass fluxes
+        - Calculate Gradients
 
-
-class Mesh_Ops():
-    def __init__(self,cell_struct,face_struct,node_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):
-        self.cell_struct = cell_struct
-        self.face_struct = face_struct
-        self.node_struct = node_struct
-
-        self.cell_properties = cell_properties 
-        self.face_properties = face_properties
-        self.float_dtype = float_dtype
-        self.int_dtype = int_dtype
-
-        self.num_outputs = num_outputs
-        self.faces_per_cell = cell_properties.faces_per_cell
-        self.dimension= cell_properties.dimension
-
-
-    def init_mesh_ops(self):
+        the actual cell and face struct arrays are not stored in this object
+    '''
+    def __init__(self,cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):
+        super().__init__(cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype,int_dtype)
+    
+    def init(self):
         @wp.kernel
         def _apply_BC_kernel(face_struct:wp.array(dtype= self.face_struct),
                              boundary_condition:wp.array(dtype=self.face_properties.boundary_value.dtype),
@@ -122,7 +119,6 @@ class Mesh_Ops():
                 m += wp.outer(face_structs[face_id].values,normal)*face_structs[face_id].area/cell_structs[i].volume
             cell_structs[i].gradients = m
 
-
         self._apply_BC = _apply_BC_kernel
         self._apply_cell_value = _apply_cell_value_kernel
         self._internal_calculate_face_interpolation = _internal_calculate_face_interpolation_kernel
@@ -130,24 +126,23 @@ class Mesh_Ops():
         self._calculate_mass_flux = _calculate_mass_flux_kernel 
         self._calculate_gradients = _calculate_gradients_kernel
 
-    def apply_BC(self):
-        faces = self.face_properties
-        wp.launch(kernel=self._apply_BC,dim = (self.face_properties.boundary_face_ids.shape[0],self.num_outputs),inputs =[self.faces,faces.boundary_value,faces.gradient_value,faces.boundary_face_ids])
+    def apply_BC(self,faces): 
+        wp.launch(kernel=self._apply_BC,dim = (self.face_properties.boundary_face_ids.shape[0],self.num_outputs),inputs =[faces,self.face_properties.boundary_value,self.face_properties.gradient_value,self.face_properties.boundary_face_ids])
     
-    def apply_cell_value(self):
-        wp.launch(kernel=self._apply_cell_value,dim = (self.num_cells,self.num_outputs) ,inputs = [self.cells,self.cell_properties.fixed_value])
+    def apply_cell_value(self,cells):
+        wp.launch(kernel=self._apply_cell_value,dim = (cells.shape[0],self.num_outputs) ,inputs = [cells,self.cell_properties.fixed_value])
 
-    def calculate_face_interpolation(self,output_indices:wp.array | None = None,interpolation_method = 1):
+    def calculate_face_interpolation(self,cells,faces,output_indices:wp.array | None = None,interpolation_method = 1):
         if output_indices is None:
             output_indices = wp.array([i for i in range(self.num_outputs)])
-        wp.launch(kernel = self._internal_calculate_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [self.faces,self.cells,self.face_properties.internal_face_ids,output_indices,interpolation_method])
-        wp.launch(kernel = self._boundary_calculate_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [self.faces,self.cells,self.face_properties.boundary_face_ids,output_indices])
+        wp.launch(kernel = self._internal_calculate_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [faces,cells,self.face_properties.internal_face_ids,output_indices,interpolation_method])
+        wp.launch(kernel = self._boundary_calculate_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [faces,cells,self.face_properties.boundary_face_ids,output_indices])
     
     
-    def calculate_mass_flux(self):
-        wp.launch(kernel = self._calculate_mass_flux,dim = (self.num_cells,self.faces_per_cell),inputs = [self.cells,
-                                                                              self.faces,
+    def calculate_mass_flux(self,cells,faces):
+        wp.launch(kernel = self._calculate_mass_flux,dim = (cells.shape[0],self.faces_per_cell),inputs = [cells,
+                                                                              faces,
                                                                               ])
     
-    def calculate_gradients(self):
-        wp.launch(kernel=self._calculate_gradients,dim = (self.num_cells),inputs = [self.cells,self.faces,self.nodes])
+    def calculate_gradients(self,cells,faces,nodes):
+        wp.launch(kernel=self._calculate_gradients,dim = (cells.shape[0]),inputs = [cells,faces,nodes])
