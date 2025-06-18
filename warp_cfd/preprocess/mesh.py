@@ -163,7 +163,8 @@ class Mesh():
         cells.num_cells=C
         cells.faces_per_cell = F
         cells.nodes_per_face = N
-        cells.num_faces = K
+        faces.num_faces = K
+        
 
         faces.unique_faces = unique_faces # (K,N)
         faces.dimension = self.dimension
@@ -335,8 +336,7 @@ class cells_data():
     '''Number of faces PER cell'''
     nodes_per_face:int
     '''Number of nodes PER FACE'''
-    num_faces:int
-    '''Number of Unique Faces'''
+
     vars_mapping: dict = {
             'u': 0, 
             'v': 1,
@@ -460,10 +460,7 @@ class faces_data():
 
     int_dtype: np.dtype = np.int32
     '''dtype used for interger point arrays. Default float32'''
-    num_cells:int
-    '''Number of cells'''
-    faces_per_cell:int
-    '''Number of faces PER cell'''
+
     nodes_per_face:int
     '''Number of nodes PER FACE'''
     num_faces:int

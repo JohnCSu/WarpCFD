@@ -1,7 +1,8 @@
 import warp as wp
+from warp_cfd.preprocess.mesh import cells_data,faces_data
 
 class Ops:
-    def __init__(self,cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):
+    def __init__(self,cell_struct,face_struct,node_struct,weight_struct,cell_properties:cells_data,face_properties:faces_data,num_outputs:int,float_dtype = wp.float32,int_dtype = wp.int32):
         self.cell_struct = cell_struct
         self.face_struct = face_struct
         self.node_struct = node_struct
@@ -13,5 +14,6 @@ class Ops:
         self.int_dtype = int_dtype
 
         self.num_outputs = num_outputs
+        self.num_cells = cell_properties.num_cells
         self.faces_per_cell = cell_properties.faces_per_cell
         self.dimension= cell_properties.dimension

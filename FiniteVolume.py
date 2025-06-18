@@ -13,12 +13,12 @@ from warp_cfd.FV.Ops.array_ops import add_1D_array,sub_1D_array,inv_1D_array,to_
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.Cells as Cells
-from warp_cfd.FV.Ops.mesh_ops import Mesh_Ops 
-from warp_cfd.FV.Ops.weight_ops import Weights_Ops
-from warp_cfd.FV.Ops.matrix_ops import Matrix_Ops
+from warp_cfd.FV.Ops import Mesh_Ops 
+from warp_cfd.FV.Ops import Weights_Ops
+from warp_cfd.FV.Ops import Matrix_Ops
 from warp_cfd.FV.Convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
-
+from warp_cfd.FV.intermediate_velocity import intermediate_velocity_step
 
 wp.config.mode = "debug"
 # wp.config.verify_fp = True
@@ -110,10 +110,6 @@ class FVM():
             laplacian_neighbor: float_dtype
             laplacian_owner: float_dtype
         return Weights
-
-
-    
-    
 
     def init_pressure_correction_operations(self):
         @wp.kernel
@@ -223,10 +219,6 @@ class FVM():
         self._calculate_p_correction_gradient = _calculate_p_correction_gradient_kernel
     
 
-
-
-    
-
     def calculate_divergence(self,arr:wp.array):
         arr.zero_()
         wp.launch(kernel=self._calculate_divergence, dim = (self.num_cells,self.faces_per_cell),inputs = [self.cells,arr])
@@ -248,45 +240,16 @@ class FVM():
         wp.launch(kernel=self._interpolate_p_correction_to_faces,dim = (self.num_faces),inputs = [self.p_correction,self.p_correction_face,self.faces])
         wp.launch(kernel=self._calculate_p_correction_gradient,dim = (self.num_cells,self.faces_per_cell),inputs = [self.p_correction_face,velocity_correction,self.inv_A,self.cells,self.faces,dimension])
 
-
-    def init_intermediate_velocity_step(self):
-        self.massflux_array = wp.empty(shape = (self.num_cells,self.faces_per_cell))
-        self.vel_COO_array = COO_Arrays(self.cell_properties.nnz_per_cell,self.dimension,self.float_dtype,self.int_dtype)
-        '''Arrays for Sparse Matrix for U step'''
-        # WE mak A*u = B matrix A. In 3D we have 3
-        self.sparse_dimensions = (self.num_cells*self.dimension,self.num_cells*self.dimension)
-        self.H = wp.zeros(shape=(self.dimension*self.num_cells),dtype=self.float_dtype)
-        self.grad_P = wp.zeros_like(src = self.H)
-        self.b = wp.zeros_like(src = self.H)
-        self.intermediate_vel = wp.zeros_like(src = self.H)
-        self.initial_vel = wp.zeros_like(src = self.H)
-
-        self.matrix_ops.calculate_BSR_matrix_indices(self.vel_COO_array,self.cells,self.faces,num_outputs = 3)
-        
-        '''
-        Each Cell results in 3 rows. Each Row would have 1 + num neighbors. We can actually calculate this beforehand
-        That means each cell gives 3*(1+num_neighbors) of nnz. So total nnz = 3*(1+num_neighbors)*num_cells 
-        '''
-        
-        self.vel_matrix = sparse.bsr_from_triplets(*self.sparse_dimensions,
-                                                      rows = self.vel_COO_array.rows,
-                                                      columns = self.vel_COO_array.cols,
-                                                      values = self.vel_COO_array.values,
-                                                      prune_numerical_zeros= False)
-        
-        self.vel_matrix_rows = self.vel_matrix.uncompress_rows()
-
     def init_pressure_correction_step(self):
         self.p = wp.zeros(shape= self.num_cells,dtype=self.float_dtype)
         self.p_relaxation_factor = 0.02
         self.u_relaxation_factor = 0.5
         self.p_COO_array = COO_Arrays(self.cell_properties.nnz_per_cell,1,self.float_dtype,self.int_dtype)
-        self.inv_A = wp.zeros(shape = self.vel_matrix.shape[0],dtype = self.float_dtype)
         self.div_u = wp.zeros(shape = self.num_cells,dtype = self.float_dtype)
         self.D_face = wp.zeros(shape= self.num_faces, dtype= self.float_dtype)
         self.p_correction = wp.zeros(shape=self.num_cells, dtype= self.float_dtype)
         self.p_correction_face = wp.zeros(shape= self.num_faces, dtype= self.float_dtype)
-        self.velocity_correction = wp.zeros_like(self.inv_A)
+        self.velocity_correction = wp.zeros(shape = self.num_cells*self.dimension, dtype= self.float_dtype)
 
         '''Arrays for Sparse Matrix fro pressure correction'''
         self.matrix_ops.calculate_BSR_matrix_indices(self.p_COO_array,self.cells,self.faces,1)
@@ -297,15 +260,6 @@ class FVM():
                                                             prune_numerical_zeros= False)
         self.p_correction_matrix_rows = self.p_correction_matrix.uncompress_rows()
 
-    def solve_intermediate_velocity(self):
-        self.matrix_ops.fill_x_array_from_struct(self.intermediate_vel,self.cells,self.vel_indices)
-        self.matrix_ops.form_p_grad_vector(self.grad_P,self.cells,self.density)
-        self.matrix_ops.get_b_vector(self.H,self.grad_P,self.b)
-        
-        wp.copy(self.intermediate_vel,self.initial_vel) # Use velocity at current iteration as initial guess
-        result = self.matrix_ops.solve_Axb(A = self.vel_matrix,x = self.intermediate_vel,b = self.b)
-        print(result)
-        self.matrix_ops.fill_struct_from_x_array(self.intermediate_vel,self.cells,self.vel_indices)
         
     def update_flux_and_weights(self):
         self.mesh_ops.calculate_face_interpolation(self.cells,self.faces,self.vel_indices,interpolation_method=1)
@@ -315,9 +269,7 @@ class FVM():
 
         self.weight_ops.calculate_convection(self.cells,self.faces,self.weights,output_indices= self.vel_indices)
         self.weight_ops.calculate_laplacian(self.cells,self.faces,self.weights,output_indices= self.vel_indices,viscosity=self.viscosity/self.density)
-        self.matrix_ops.calculate_BSR_matrix_and_RHS(self.vel_matrix,self.cells,self.faces,self.weights,output_indices=self.vel_indices,b = self.H,rows= self.vel_matrix_rows)
-        self.inv_A = sparse.bsr_get_diag(self.vel_matrix)
-        inv_1D_array(self.inv_A,self.inv_A) # Invert A i.e. 1/a_i
+        
 
 
     def solve_pressure_correction(self):
@@ -389,15 +341,16 @@ class FVM():
         self.mesh_ops.init()
         self.weight_ops.init()
         self.matrix_ops.init()
-
+        self.intermediate_velocity_step = intermediate_velocity_step(self.mesh_ops,self.weight_ops,self.matrix_ops)
+        self.intermediate_velocity_step.init(self.cells,self.faces)
         self.init_pressure_correction_operations()
-
-        self.init_intermediate_velocity_step()
         self.init_pressure_correction_step()
 
         self.mesh_ops.apply_BC(self.faces)
         self.mesh_ops.apply_cell_value(self.cells)
 
+
+        self.massflux_array = wp.empty(shape = (self.num_cells,self.faces_per_cell))
     def struct_member_to_array(self,member = 'mass_fluxes',struct = 'cells'):
         if struct == 'cells':
             struct_ = self.cell_struct
@@ -410,16 +363,15 @@ class FVM():
         keys = list(struct_.vars.keys())
         index = keys.index(member)
 
-        
-        
         member_arr = [a[index] for a in arr]
         return np.array(member_arr)
 
     def step(self):
         if self.steps == 0:
             self.update_flux_and_weights()
-            
-        self.solve_intermediate_velocity()
+
+        self.vel_matrix,self.initial_vel,self.b,self.intermediate_vel,self.inv_A = self.intermediate_velocity_step.solve(self.cells,self.faces,self.weights,self.density,self.vel_indices)
+
         self.solve_pressure_correction()
         self.update_flux_and_weights()
         converged = self.check_convergence(self.vel_matrix,self.initial_vel,self.b,self.div_u,self.velocity_correction,self.p_correction)
