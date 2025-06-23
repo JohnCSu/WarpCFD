@@ -153,7 +153,7 @@ class FVM():
         self.mesh_ops.calculate_mass_flux(self.cells,self.faces) # Update Mass Flux
        
     def update_weights(self):
-        # self.weight_ops.calculate_convection(self.cells,self.faces,self.convection_weights,output_indices= self.vel_indices)
+        self.weight_ops.calculate_convection(self.cells,self.faces,self.convection_weights,output_indices= self.vel_indices)
         self.weight_ops.calculate_laplacian(self.cells,self.faces,self.laplacian_weights,output_indices= self.vel_indices,viscosity=self.viscosity/self.density)
 
     def check_convergence(self,vel_matrix:sparse.BsrMatrix,velocity:wp.array,b:wp.array,div_u=None,velocity_correction:wp.array=None,p_correction:wp.array=None,log = True):
@@ -273,8 +273,8 @@ if __name__ == '__main__':
     plt.show()
     m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip
     m.set_boundary_value('-X',u = 0,v = 0,w = 0) # No Slip
-    m.set_boundary_value('-Y',u = 0,v = inlet,w = 0) # No Slip
-    m.set_boundary_value('+Y',u = 0,v = inlet,w = 0) # Velocity Inlet
+    m.set_boundary_value('-Y',u = 0,v = inlet,w = 0,p =1) # No Slip
+    m.set_boundary_value('+Y',u = 0,v = inlet,w = 0,p = 0 ) # Velocity Inlet
     # m.set_boundary_value('-Y',p = 0.) # No Slip
     # m.set_boundary_value('+Y',p = 1.) # Velocity Inlet
 
@@ -355,11 +355,13 @@ if __name__ == '__main__':
     # print()
     v_05 = v.reshape((n,n))[n//2]
     u_05 = u.reshape((n,n))[:,n//2]
+    p_corr = model.pressure_correction_step.p_correction.numpy()
+    results.cell_data['p_corr'] = p_corr
     model.Convergence.plot_residuals()
     results.plot(scalars="u", cmap="jet", show_scalar_bar=True)
     results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
     results.plot(scalars="v", cmap="jet", show_scalar_bar=True)
-    # results.plot(scalars="umag", cmap="jet", show_scalar_bar=True)
+    results.plot(scalars="p_corr", cmap="jet", show_scalar_bar=True)
     
     # plt.plot(x[n//2],v_05)
     # plt.plot(x[n//2],inlet)
@@ -371,10 +373,10 @@ if __name__ == '__main__':
     # plt.plot(y,P)
     # plt.show()
 
-    print(0.2/v_05.max())
+    # print(0.2/v_05.max())
     
-    A = (1/n)*(1/n)
-    V = m.cell_volumes[0]
-    print(f'A {A} , 1/A {1/A}')
-    print(f'V {V} , 1/V {1/V}')
-    print(f'V/A {V/A} , A/V {A/V}')
+    # A = (1/n)*(1/n)
+    # V = m.cell_volumes[0]
+    # print(f'A {A} , 1/A {1/A}')
+    # print(f'V {V} , 1/V {1/V}')
+    # print(f'V/A {V/A} , A/V {A/V}')
