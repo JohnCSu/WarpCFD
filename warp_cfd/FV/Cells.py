@@ -105,6 +105,8 @@ def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int
         return Cell,Face,Node
     
 
+
+
 def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties,face_properties,node_properties:wp.array):
         
         cell_struct = cells.dtype

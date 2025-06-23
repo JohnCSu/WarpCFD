@@ -25,23 +25,23 @@ class Weights_Ops(Ops):
             face_idx = cell_structs[i].faces[j]
             
             if face_structs[face_idx].is_boundary == 1:
-                weights[i,j,output].convection_owner = wp.static(self.float_dtype(0.)) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-                weights[i,j,output].convection_neighbor = cell_structs[i].mass_fluxes[j]*face_structs[face_idx].values[output]
+                weights[i,j,output].owner = wp.static(self.float_dtype(0.)) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+                weights[i,j,output].neighbor = cell_structs[i].mass_fluxes[j]*face_structs[face_idx].values[output]
             else:
                 
                 owner_face_idx = cell_structs[i].face_sides[j] # Returns if current cell i is on the 0 side of face or 1 side of face
                 adj_face_idx = wp.static(self.int_dtype(1)) - owner_face_idx # Apply not operation to get the other index (can only be 1 or 0)
                 if interpolation == 0: # Central Differencing
-                    weights[i,j,output].convection_owner = face_structs[face_idx].norm_distance[owner_face_idx]*cell_structs[i].mass_fluxes[j]
-                    weights[i,j,output].convection_neighbor = face_structs[face_idx].norm_distance[adj_face_idx]*cell_structs[i].mass_fluxes[j]
+                    weights[i,j,output].owner = face_structs[face_idx].norm_distance[owner_face_idx]*cell_structs[i].mass_fluxes[j]
+                    weights[i,j,output].neighbor = face_structs[face_idx].norm_distance[adj_face_idx]*cell_structs[i].mass_fluxes[j]
                 elif interpolation == 1: # Upwind
                     if cell_structs[i].mass_fluxes[j] > 0:
-                        weights[i,j,output].convection_owner = cell_structs[i].mass_fluxes[j]
-                        weights[i,j,output].convection_neighbor = 0.
+                        weights[i,j,output].owner = cell_structs[i].mass_fluxes[j]
+                        weights[i,j,output].neighbor = 0.
 
                     else:
-                        weights[i,j,output].convection_owner = 0.
-                        weights[i,j,output].convection_neighbor = -cell_structs[i].mass_fluxes[j]
+                        weights[i,j,output].owner = 0.
+                        weights[i,j,output].neighbor = -cell_structs[i].mass_fluxes[j]
         @wp.kernel
         def _interpolate_viscosity_to_face_kernel(cell_viscosity:wp.array(dtype=self.float_dtype),face_viscosity:wp.array(dtype=self.float_dtype),face_structs:wp.array(dtype=self.face_struct)):
             face_id = wp.tid()
@@ -71,22 +71,22 @@ class Weights_Ops(Ops):
             # we calculate grad(u)_f dot n_f with central differencing
             if face_structs[face_id].is_boundary == 1: #(up - ub)/distance *A
                 if face_structs[face_id].gradient_is_fixed[output]:
-                    weights[i,j,output].laplacian_owner = 0.
-                    weights[i,j,output].laplacian_neighbor = face_structs[face_id].gradients[output]
+                    weights[i,j,output].owner = 0.
+                    weights[i,j,output].neighbor = face_structs[face_id].gradients[output]
                 else:
                     cell_centroid_to_face_centroid_magnitude = wp.length(cell_structs[i].cell_centroid_to_face_centroid[j])
                     weight = nu*(face_structs[face_id].area)/cell_centroid_to_face_centroid_magnitude
 
-                    weights[i,j,output].laplacian_owner = -weight # Unknown 
-                    weights[i,j,output].laplacian_neighbor = weight*(face_structs[face_id].values[output]) # Known Value so evaluate explicit
+                    weights[i,j,output].owner = -weight # Unknown 
+                    weights[i,j,output].neighbor = weight*(face_structs[face_id].values[output]) # Known Value so evaluate explicit
                 # wp.printf('scalar %f nu %f area %f dist %f val %f  \n ',vis_area_div_dist,nu,face_structs[face_id].area,cell_centroid_to_face_centroid_magnitude,face_structs[face_id].values[output])
 
                 # wp.printf('a %f fv %f cv %f \n',face_structs[face_id].area,face_structs[face_id].values[output],cell_structs[i].values[output])
             else:
                 distance = wp.length(face_structs[face_id].cell_distance)
                 weight = nu*(face_structs[face_id].area)/distance
-                weights[i,j,output].laplacian_owner = -weight
-                weights[i,j,output].laplacian_neighbor = weight
+                weights[i,j,output].owner = -weight
+                weights[i,j,output].neighbor = weight
                 # wp.printf('%f neighbor \n',weights[i,j,output].laplacian_neighbor)
 
         self._calculate_convection_weights = _calculate_convection_weights_kernel

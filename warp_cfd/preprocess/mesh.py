@@ -479,18 +479,16 @@ class faces_data():
             face_ids = np.array([face_ids])
 
         assert np.all(self.is_boundary[face_ids]), 'One of the provided face id is not an external face valid for applying boundary conditions'
+        ''' we either have a float for all in face_ids or an array of same len'''
 
-        vars_mapping =self.vars_mapping
-        ''' Mapping of variable names to order'''
-        values_to_set = {name:val for name,val in zip(vars_mapping.keys(),[u,v,w,p]) if val is not None}
-        vars_to_fix = [idx for key,idx in vars_mapping.items() if key in values_to_set.keys() ]
+        for i,var in enumerate([u,v,w,p]):
+            if var is not None:
+                self.boundary_value[face_ids,i] = var
+                self.boundary_value_is_fixed[face_ids,i] = True
+                if overwrite_gradient:
+                    self.gradient_value_is_fixed[face_ids,i] = False       
 
-        idx = np.ix_(face_ids,vars_to_fix)
-        self.boundary_value[idx] = list(values_to_set.values())
-        self.boundary_value_is_fixed[idx] = True
-
-        if overwrite_gradient:
-            self.gradient_value_is_fixed[idx] = False
+        
 
     def set_gradient_value(self,face_ids: int | list |tuple |np.ndarray,u = None,v=None,w=None,p=None,overwrite_boundary = False):
         #Set the gradient value normal to each face

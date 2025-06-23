@@ -60,7 +60,8 @@ class Matrix_Ops(Ops):
                                 values:wp.array(dtype= self.float_dtype),
                                 cell_structs:wp.array(dtype= self.cell_struct),
                                 weights:wp.array3d(dtype= self.weight_struct),
-                                output_indices:wp.array(dtype= self.int_dtype)):
+                                output_indices:wp.array(dtype= self.int_dtype),
+                                flip_sign:wp.bool):
             i = wp.tid()
 
             row = bsr_rows[i]
@@ -73,21 +74,29 @@ class Matrix_Ops(Ops):
 
             owner_cell = cell_structs[cell_id]
 
+            if flip_sign: # if term 
+                owner_scale = -1.
+                neighbor_scale = -1.
+            else: # Convective so interpolation weighting or if laplacian remain
+                owner_scale = 1.
+                neighbor_scale = 1.
+
             if row == col:
                 for face_idx in range(owner_cell.faces.length):
                     # if owner_cell.neighbors[face_idx] != -1: # So not boundary
-                    wp.atomic_add(values,i, -weights[cell_id,face_idx,output].laplacian_owner + weights[cell_id,face_idx,output].convection_owner)
+                    wp.atomic_add(values,i, owner_scale*weights[cell_id,face_idx,output].owner)
             else: # Off Diagonal
                 face_idx = get_face_idx(owner_cell.neighbors,neighbor_id)
                 if face_idx != -1:    
-                    wp.atomic_add(values,i, -weights[cell_id,face_idx,output].laplacian_neighbor + weights[cell_id,face_idx,output].convection_neighbor)
+                    wp.atomic_add(values,i, neighbor_scale*weights[cell_id,face_idx,output].neighbor)
 
         @wp.kernel
         def _calculate_RHS_values_kernel(b:wp.array(dtype=self.float_dtype),
                                         boundary_face_ids:wp.array(dtype= self.face_properties.boundary_face_ids.dtype),
                                         face_structs:wp.array(dtype=self.face_struct),
                                         weights:wp.array3d(dtype= self.weight_struct),
-                                        output_indices:wp.array(dtype= self.int_dtype)):
+                                        output_indices:wp.array(dtype= self.int_dtype),
+                                        flip_sign:wp.bool):
             
             i,output_idx = wp.tid() #Loop through Boundary faces
 
@@ -97,8 +106,12 @@ class Matrix_Ops(Ops):
             output = output_indices[output_idx]
             row = cell_id*output_indices.shape[0] +output_idx
 
-            wp.atomic_add(b,row,weights[cell_id,face_idx,output].laplacian_neighbor -  weights[cell_id,face_idx,output].convection_neighbor )
-
+            if flip_sign: # Convective so moving to RHS needs -ve
+                scale = -1.
+            else:  # If solving for laplacian explicit terms
+                scale = 1.
+            # wp.atomic_add(b,row,weights[cell_id,face_idx,output].neighbor -  weights[cell_id,face_idx,output].neighbor )
+            wp.atomic_add(b,row,scale*weights[cell_id,face_idx,output].neighbor )
 
         @wp.kernel
         def form_p_grad_vector_kernel(b:wp.array(dtype=self.float_dtype),
@@ -108,46 +121,43 @@ class Matrix_Ops(Ops):
                 p = wp.static(self.int_dtype(3))
                 row = i*D + dim
                 # wp.printf('n1 %f n2 %f n3 %f \n',cell_structs[i].grads[p][0],cell_structs[i].grads[p][1],cell_structs[i].grads[p][2])
-                b[row] =  cell_structs[i].gradients[p][dim]/density
+                b[row] =  cell_structs[i].gradients[p][dim]/density*cell_structs[i].volume
+            
 
 
         @wp.kernel
-        def fill_x_array_from_struct_kernel(x:wp.array(dtype=self.float_dtype),cell_structs:wp.array(dtype=self.cell_struct),output_indices:wp.array(dtype=self.int_dtype)):
-            i,output_idx = wp.tid() # C,O
+        def _update_p_correction_rows_kernel(bsr_row_offsets:wp.array(dtype= self.int_dtype),
+                                bsr_columns: wp.array(dtype= self.int_dtype),
+                                values:wp.array(dtype=self.float_dtype),
+                                b:wp.array(dtype=self.float_dtype),
+                                fixed_cells_id:wp.array(dtype=self.int_dtype)):
             
-            output = output_indices[output_idx]
-            num_outputs = output_indices.shape[0]
-            row = i*num_outputs + output_idx
-            x[row] = cell_structs[i].values[output]
-
-        @wp.kernel
-        def fill_struct_from_x_array_kernel(x:wp.array(dtype=self.float_dtype),cell_structs:wp.array(dtype=self.cell_struct),output_indices:wp.array(dtype=self.int_dtype)):
-
-            i,output_idx = wp.tid() # C,O
+            i = wp.tid() # We go through all Cells with fixed pressure values
             
-            output = output_indices[output_idx]
-            num_outputs = output_indices.shape[0]
-            row = i*num_outputs + output_idx
-            cell_structs[i].values[output] = x[row] 
+            #For now only for pressure so cell_id = row
+            cell_id = fixed_cells_id[i]
+            col_start,col_end = bsr_row_offsets[cell_id], bsr_row_offsets[cell_id+1]
+            for nnz_idx in range(col_start,col_end):
+                column = bsr_columns[nnz_idx]
+                if cell_id == column: #Diagonal
+                    values[nnz_idx] = 1.
+                else: # Off diagonal
+                    values[nnz_idx] = 0.
             
-        @wp.kernel
-        def _massflux_to_array_kernel(cell_structs:wp.array(dtype=self.cell_struct),out:wp.array2d(dtype = self.float_dtype)):
-            i,j = wp.tid()
-            out[i,j] = cell_structs[i].mass_fluxes[j]
-
+            b[cell_id] = 0. # Replace the div u with 0 to indicate no pressure correction
 
         self._form_p_grad_vector_kernel= form_p_grad_vector_kernel
         '''attribute to call method with which to form the pressure gradient vector'''
-        self._massflux_to_array = _massflux_to_array_kernel
+        
         # self._calculate_BSR_matrix_and_RHS = calculate_BSR_matrix_and_RHS_kernel
         self._calculate_BSR_values = _calculate_BSR_values_kernel
         self._calculate_RHS_values = _calculate_RHS_values_kernel
 
         self._get_matrix_indices = get_matrix_indices
 
-        self._fill_x_array_from_struct=fill_x_array_from_struct_kernel
-        self._fill_struct_from_x_array = fill_struct_from_x_array_kernel
+        
 
+        self._update_p_correction_rows = _update_p_correction_rows_kernel #matrix ops
     
     def calculate_BSR_matrix_indices(self,COO_array:COO_Arrays,cells,faces,num_outputs:int):
         wp.launch(kernel=self._get_matrix_indices,dim = [cells.shape[0],self.faces_per_cell+1,num_outputs],inputs = [COO_array.rows,
@@ -159,40 +169,33 @@ class Matrix_Ops(Ops):
                                                                                                                   ])
 
 
-    def calculate_BSR_matrix_and_RHS(self,BSR_matrix:sparse.BsrMatrix,cells,faces,weights,output_indices:wp.array,b:wp.array = None,rows =None):
+    def calculate_BSR_matrix_and_RHS(self,BSR_matrix:sparse.BsrMatrix,cells,faces,weights,output_indices:wp.array,flip_sign:bool,b:wp.array = None,rows =None):
         if rows is None:
             rows = BSR_matrix.uncompress_rows()
         assert rows.shape[0] == BSR_matrix.values.shape[0]
-        BSR_matrix.values.zero_() # Reset to zero
+        
         wp.launch(kernel=self._calculate_BSR_values,dim = BSR_matrix.values.shape[0],inputs=[rows,
                                                                                              BSR_matrix.columns,
                                                                                              BSR_matrix.values,
                                                                                              cells,
                                                                                              weights,
-                                                                                             output_indices])
+                                                                                             output_indices,
+                                                                                             flip_sign])
         
         if b is not None:
-            b.zero_()
             boundary_ids = self.face_properties.boundary_face_ids
             wp.launch(kernel= self._calculate_RHS_values, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
                                                                                                                     boundary_ids,
                                                                                                                     faces,
                                                                                                                     weights,
                                                                                                                     output_indices,
+                                                                                                                    not flip_sign,
 
             ])
     def form_p_grad_vector(self,grad_P,cells,density):
         wp.launch(kernel=self._form_p_grad_vector_kernel, dim = [cells.shape[0],self.dimension], inputs = [grad_P,cells,density])
         
-    def fill_x_array_from_struct(self,x,cells,output_indices):
-        
-        assert x.shape[0] == cells.shape[0]*output_indices.shape[0]
-        wp.launch(kernel=self._fill_x_array_from_struct,dim = [cells.shape[0],output_indices.shape[0]],inputs = [x,cells,output_indices])
     
-    def fill_struct_from_x_array(self,x,cells,output_indices):
-        assert x.shape[0] == cells.shape[0]*output_indices.shape[0]
-        wp.launch(kernel=self._fill_struct_from_x_array,dim = [cells.shape[0],output_indices.shape[0]],inputs = [x,cells,output_indices])
-
     def get_b_vector(self,H,grad_P,b):
         sub_1D_array(H,grad_P,b)
     
@@ -200,6 +203,6 @@ class Matrix_Ops(Ops):
         M = linear.preconditioner(A)
         return self.linear_solver(A =A,M= M, b = b,x = x,maxiter=500)
     
-    def massflux_to_array(self,arr:wp.array,cells):
-        assert len(arr.shape) == 2 and arr.shape[0] == cells.shape[0] and arr.shape[1] == self.faces_per_cell
-        wp.launch(kernel=self._massflux_to_array,dim = [cells.shape[0],self.faces_per_cell],inputs = [cells,arr])
+    def update_p_correction_rows(self,bsr_matrix:sparse.BsrMatrix,div_u:wp.array):
+        fixed_cells = self.cell_properties.fixed_cells
+        wp.launch(kernel=self._update_p_correction_rows,dim = fixed_cells.shape[0], inputs=[bsr_matrix.offsets,bsr_matrix.columns,bsr_matrix.values,div_u,fixed_cells])
