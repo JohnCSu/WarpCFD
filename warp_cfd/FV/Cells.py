@@ -41,8 +41,8 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,num_outputs = 4,di
         face_offset_index:vector(length=faces_per_cell,dtype= int_dtype)
         '''vector indicating the offset index for a given face. 0 if boundary'''
 
-        values: vector(length=num_outputs,dtype = float_dtype)
-        gradients: mat(shape = (num_outputs,dimension),dtype= float_dtype)
+        # values: vector(length=num_outputs,dtype = float_dtype)
+        # gradients: mat(shape = (num_outputs,dimension),dtype= float_dtype)
         value_is_fixed:vector(length=num_outputs,dtype = wp.uint8)
     return Cell
 
@@ -61,8 +61,8 @@ def _create_face_struct(nodes_per_face:int,num_outputs = 4,dimension:int = 3, fl
         norm_distance: vector(length= 2, dtype= float_dtype) # normalised distance from adjacent cell centroid to face centroid
         area:float_dtype
         cell_distance: vector(length = dimension,dtype= float_dtype) # Distance vector from owner cell centroid 0 to neighbor cell centroid 1
-        values: vector(length=num_outputs,dtype = float_dtype)
-        gradients: vector(length=num_outputs,dtype = float_dtype)  # Assume only Normal component exists so we only need a vector
+        # values: vector(length=num_outputs,dtype = float_dtype)
+        # gradients: vector(length=num_outputs,dtype = float_dtype)  # Assume only Normal component exists so we only need a vector
         is_boundary: wp.uint8
         value_is_fixed: vector(length= num_outputs,dtype= wp.uint8) # 1 is fixed, 0 is free
         gradient_is_fixed: vector(length= num_outputs,dtype= wp.uint8) 

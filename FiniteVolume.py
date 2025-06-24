@@ -130,12 +130,15 @@ class FVM():
         self.initial_velocity = wp.zeros_like(self.intermediate_velocity)
         self.corrected_velocity = wp.zeros_like(self.intermediate_velocity)
         
-        self.gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.mesh_ops.vector_type)
+        self.cell_values = wp.zeros((self.num_cells,self.num_outputs),dtype = self.float_dtype)
+        self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.mesh_ops.vector_type)
+        self.face_values = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
+        self.face_gradients = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
         self.D_face = wp.zeros(shape = (self.num_faces),dtype=self.float_dtype)
         self.D_cell = wp.zeros(shape = self.num_cells,dtype = self.mesh_ops.vector_type)
 
     def update_flux(self,rhie_chow=True):
-        self.gradients.zero_() # Use it to store stuff
+        self.cell_gradients.zero_() # Use it to store stuff
         self.mesh_ops.apply_BC(self.faces)
         # self.mesh_ops.apply_cell_value(self.cells)
         self.mesh_ops.calculate_face_interpolation(self.cells,self.faces,self.p_index,interpolation_method=0)
