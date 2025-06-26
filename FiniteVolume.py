@@ -121,7 +121,7 @@ class FVM():
     
 
     def set_initial_conditions(self,IC):
-        self.mesh_ops.set_initial_conditions(IC,self.cells)
+        self.mesh_ops.set_initial_conditions(IC,self.cell_values)
 
     def init_global_arrays(self):
         self.massflux_array = wp.empty(shape = (self.num_cells,self.faces_per_cell))
@@ -135,29 +135,29 @@ class FVM():
         self.face_values = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
         self.face_gradients = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
         self.D_face = wp.zeros(shape = (self.num_faces),dtype=self.float_dtype)
-        self.D_cell = wp.zeros(shape = self.num_cells,dtype = self.mesh_ops.vector_type)
+        self.D_cell = wp.zeros(shape = self.num_cells,dtype = self.float_dtype)
 
     def update_flux(self,rhie_chow=True):
         self.cell_gradients.zero_() # Use it to store stuff
-        self.mesh_ops.apply_BC(self.faces)
+        self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
         # self.mesh_ops.apply_cell_value(self.cells)
-        self.mesh_ops.calculate_face_interpolation(self.cells,self.faces,self.p_index,interpolation_method=0)
+        self.mesh_ops.calculate_face_interpolation(self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.p_index,interpolation_method=0)
         # print('p face',self.struct_member_to_array('values','faces')[:,-1])
-        self.mesh_ops.calculate_face_interpolation(self.cells,self.faces,self.vel_indices,interpolation_method=0)
+        self.mesh_ops.calculate_face_interpolation(self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.vel_indices,interpolation_method=1)
         
-        self.mesh_ops.calculate_gradients(self.gradients,self.cells,self.faces,self.nodes,self.p_index)
-        if rhie_chow:
-            self.mesh_ops.rhie_chow_correction(self.gradients,self.D_face,self.cells,self.faces,self.vel_indices)
-        
-        self.mesh_ops.calculate_gradients(self.gradients,self.cells,self.faces,self.nodes,self.vel_indices)
-        # print('g',self.gradients.numpy()[:,-1])
-        self.mesh_ops.gradient_to_cell_struct(self.gradients,self.cells)
+        self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
+        self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.vel_indices)
 
-        self.mesh_ops.calculate_mass_flux(self.cells,self.faces) # Update Mass Flux
+        if rhie_chow:
+            self.mesh_ops.rhie_chow_correction(self.cell_values,self.face_values,self.cell_gradients,self.D_face,self.cells,self.faces,self.vel_indices)
+        else:
+        # print('g',self.gradients.numpy()[:,-1])
+        # self.mesh_ops.gradient_to_cell_struct(self.cell_gradients,self.cells)
+            self.mesh_ops.calculate_mass_flux(self.face_values,self.cells,self.faces) # Update Mass Flux
        
     def update_weights(self):
-        self.weight_ops.calculate_convection(self.cells,self.faces,self.convection_weights,output_indices= self.vel_indices)
-        self.weight_ops.calculate_laplacian(self.cells,self.faces,self.laplacian_weights,output_indices= self.vel_indices,viscosity=self.viscosity/self.density)
+        # self.weight_ops.calculate_convection(self.face_values,self.cells,self.faces,self.convection_weights,output_indices= self.vel_indices)
+        self.weight_ops.calculate_laplacian(self.face_values,self.face_gradients,self.cells,self.faces,self.laplacian_weights,output_indices= self.vel_indices,viscosity=self.viscosity/self.density)
 
     def check_convergence(self,vel_matrix:sparse.BsrMatrix,velocity:wp.array,b:wp.array,div_u=None,velocity_correction:wp.array=None,p_correction:wp.array=None,log = True):
         '''
@@ -175,7 +175,7 @@ class FVM():
 
         Ax = Ax.numpy().reshape(-1,3)
 
-        self.matrix_ops.form_p_grad_vector(self.intermediate_velocity_step.grad_P,self.cells,self.density)
+        self.matrix_ops.form_p_grad_vector(self.intermediate_velocity_step.grad_P,self.cell_gradients,self.cells,self.density)
         self.matrix_ops.get_b_vector(self.intermediate_velocity_step.H,self.intermediate_velocity_step.grad_P,b)
 
         b = b.numpy().reshape(-1,3)
@@ -213,33 +213,56 @@ class FVM():
 
     def step(self):
         if self.steps == 0:
+            self.matrix_ops.fill_matrix_vector_from_outputs(self.cell_values,self.initial_velocity,self.vel_indices)
             self.update_flux(False)
             self.update_weights()
-
-        vel_matrix,b,inv_A = self.intermediate_velocity_step.solve(self.initial_velocity,self.intermediate_velocity,self.cells,self.faces,self.laplacian_weights,self.convection_weights,self.density,self.vel_indices)
-        # print(bsr_to_coo_array(vel_matrix).toarray())
+        
+        
+        # print('vel',self.cell_values.numpy()[:,0:-1].flatten())
+        # print('initial vel',self.initial_velocity.numpy())
+        vel_matrix,b,inv_A = self.intermediate_velocity_step.solve(self.initial_velocity,
+                                                                   self.intermediate_velocity,
+                                                                   self.cell_values,
+                                                                   self.cell_gradients,
+                                                                   self.cells,self.faces,self.laplacian_weights,self.convection_weights,self.density,self.vel_indices)
+        grad_P=self.intermediate_velocity_step.grad_P.numpy()
+        # print('vel',self.cell_values.numpy()[:,0:-1].flatten())
+        # print('intermeditate vel',self.intermediate_velocity.numpy())
+        # print('p grad',self.cell_gradients.numpy()[:,-1,:])
+        # print('grad_P', grad_P.reshape(-1,3))
+        self.check_convergence(vel_matrix,self.initial_velocity,b,log= False)
+        
+        print('vel')
+        vel = bsr_to_coo_array(vel_matrix).toarray()
+        # print(np.diag(vel))
+        self.update_flux(True)
         self.check_convergence(vel_matrix,self.intermediate_velocity,b,log= False)
         self.pressure_correction_ops.calculate_D_viscosity(self.D_cell,self.D_face,inv_A,self.cells,self.faces)
-        # print(self.D_face.numpy().reshape(-1,3))
-        # print(inv_A.numpy().reshape(-1,3))
-        self.update_flux()
-        p,div_u,p_correction,velocity_correction = self.pressure_correction_step.solve(self.intermediate_velocity,self.corrected_velocity,self.D_face,self.cells,self.faces) 
-        converged = self.check_convergence(vel_matrix,self.corrected_velocity,b,div_u,velocity_correction,p_correction)
-        self.update_flux()
-       
-        self.update_weights()
+        # print('done!')
+        
+        # print('D Face',self.D_cell.numpy().__abs__().mean())
+        # print('divu',self.mesh_ops.calculate_divergence(None,self.cells).numpy())
+        p,div_u,p_correction,velocity_correction = self.pressure_correction_step.solve(self.intermediate_velocity,self.corrected_velocity,self.cell_values,self.D_face,self.cells,self.faces) 
+        p_corr_m = self.pressure_correction_step.p_correction_matrix
+
+        print('p_corr')
+        # arr = bsr_to_coo_array(p_corr_m).toarray()
+        # print((arr))
+        # print('div u',self.mesh_ops.calculate_divergence(None,self.cells).numpy())
 
         
         wp.copy(self.initial_velocity,self.corrected_velocity)
+        self.update_flux(True)
+        converged = self.check_convergence(vel_matrix,self.corrected_velocity,b,div_u,velocity_correction,p_correction)
+        self.update_weights()
+        
         self.steps += 1
-        return converged
+        # return converged
 
 
 
 def bsr_to_coo_array(bsr:sparse.BsrMatrix):
     return sp_sparse.coo_array((bsr.values.numpy(),(bsr.uncompress_rows().numpy(),bsr.columns.numpy())),shape = (bsr.nrow,bsr.ncol))
-
-from copy import deepcopy
 
 def pouiselle_flow(xyz,width,G = 1.,nu = 0.01):
     '''
@@ -264,8 +287,8 @@ def pouiselle_flow(xyz,width,G = 1.,nu = 0.01):
 
 if __name__ == '__main__':
     from grid import create_hex_grid
-    n = 21
-    w,l = 1.,1
+    n = 15
+    w,l = 1.,4.
     G,nu = 1,1
     m = create_hex_grid(n,n,1,(w/n,l/n,0.1))
 
@@ -276,8 +299,9 @@ if __name__ == '__main__':
     plt.show()
     m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip
     m.set_boundary_value('-X',u = 0,v = 0,w = 0) # No Slip
-    m.set_boundary_value('-Y',u = 0,v = inlet,w = 0,p =1) # No Slip
-    m.set_boundary_value('+Y',u = 0,v = inlet,w = 0,p = 0 ) # Velocity Inlet
+    m.set_boundary_value('-Y',u = 0,v = inlet,w = 0) # No Slip
+    # m.set_boundary_value('-Y',p=0)
+    m.set_boundary_value('+Y',u = 0,v = inlet,w = 0) # Velocity Inlet
     # m.set_boundary_value('-Y',p = 0.) # No Slip
     # m.set_boundary_value('+Y',p = 1.) # Velocity Inlet
 
@@ -286,8 +310,9 @@ if __name__ == '__main__':
     m.set_gradient_value('+Z',u=0,v=0,w=0,p=0) # No penetration condition
     m.set_gradient_value('+X',p = 0) # No Slip
     m.set_gradient_value('-X',p = 0) # No Slip
-    # m.set_gradient_value('-Y',p = 0) # No Slip
+    # m.set_gradient_value('-Y',u=0,v=0,w=0) # No Slip
     # m.set_gradient_value('+Y',p = 0) # Velocity Inlet
+    # m.set_gradient_value('-Y',p = 0) # Velocity Inlet
     
     m.set_cell_value(0,p= 0)
 
@@ -295,8 +320,9 @@ if __name__ == '__main__':
     
     model = FVM(m,density = 1.,viscosity= nu)
     model.init_step()
-    # model.set_initial_conditions(wp.array(IC))
-    
+    model.set_initial_conditions(wp.array(IC,dtype =wp.float32))
+    # IC[np.nonzero(IC)] = -1.
+    # model.set_initial_conditions(wp.array(IC,dtype = wp.float32))
     
     results = m.pyvista_mesh
     # print(model.p.shape)
@@ -307,14 +333,8 @@ if __name__ == '__main__':
     # results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
     # results.plot(scalars="v", cmap="jet", show_scalar_bar=True)
     
-    
-    
-    
-    
-    
-    
     np.set_printoptions(linewidth=300,threshold=100000,precision = 5)
-    model.MAX_STEPS = 2
+    model.MAX_STEPS = 10
     for i in range(model.MAX_STEPS):
         print(model.step())
         
@@ -361,25 +381,31 @@ if __name__ == '__main__':
     p_corr = model.pressure_correction_step.p_correction.numpy()
     results.cell_data['p_corr'] = p_corr
     model.Convergence.plot_residuals()
-    results.plot(scalars="u", cmap="jet", show_scalar_bar=True)
-    results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
-    results.plot(scalars="v", cmap="jet", show_scalar_bar=True)
-    results.plot(scalars="p_corr", cmap="jet", show_scalar_bar=True)
+    # results.plot(scalars="u", cmap="jet", show_scalar_bar=True)
+    # results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
+    # results.plot(scalars="v", cmap="jet", show_scalar_bar=True)
+    # results.plot(scalars="p_corr", cmap="jet", show_scalar_bar=True)
     
-    # plt.plot(x[n//2],v_05)
-    # plt.plot(x[n//2],inlet)
-    # plt.show()
+    plt.plot(x[n//2],v_05)
+    plt.plot(x[n//2],inlet)
+    plt.show()
 
+    plt.plot(y[n//2],u_05)
+    # plt.plot(x?[n//2],inlet)
+    plt.show()
     
     y,P = np.sort( np.stack([m.cell_centroids[:,1],IC[:,-1]],axis = 0),axis = 1)
 
-    # plt.plot(y,P)
-    # plt.show()
+    plt.plot(y,P)
+    plt.show()
 
     # print(0.2/v_05.max())
-    
-    # A = (1/n)*(1/n)
-    # V = m.cell_volumes[0]
-    # print(f'A {A} , 1/A {1/A}')
-    # print(f'V {V} , 1/V {1/V}')
-    # print(f'V/A {V/A} , A/V {A/V}')
+    d = 1/n
+    A = (1/n)*0.1
+    V = m.cell_volumes[0]
+
+    difu = nu*A/d
+    print(f'difu ap {difu}')
+    print(f'A {A} , 1/A {1/A}')
+    print(f'V {V} , 1/V {1/V}')
+    print(f'V/A {V/A} , A/V {A/V}')

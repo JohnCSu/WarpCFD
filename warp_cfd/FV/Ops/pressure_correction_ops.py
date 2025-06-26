@@ -15,37 +15,35 @@ class Pressure_correction_Ops(Ops):
 
 
         @wp.kernel
-        def _calculate_D_at_cells_kernel(D_cell:wp.array(dtype=self.vector_type),
-                                         inv_A:wp.array2d(dtype=self.float_dtype),
+        def _calculate_D_at_cells_kernel(D_cell:wp.array(dtype=self.float_dtype),
+                                         inv_A:wp.array(dtype=self.float_dtype),
                                          cell_structs:wp.array(dtype=self.cell_struct)
                                          ):
-            i = wp.tid()
-
-            D_vec = get_vector_from_array(inv_A,i)*cell_structs[i].volume
-            D_cell[i] = D_vec
+            i = wp.tid() # By Cells
+            # diagonals for a cell in u,v,w are always the same for isotropic viscosity
+            D = 3
+            row = i*D
+            D_cell[i] = inv_A[row]*cell_structs[i].volume
 
 
 
 
         @wp.kernel
         def _interpolate_D_to_face_kernel(D_face:wp.array(dtype=self.float_dtype),
-                                          D_cell:wp.array(dtype=self.vector_type),
-                                          cell_structs: wp.array(dtype= self.cell_struct),
+                                          D_cell:wp.array(dtype=self.float_dtype),
                                           face_structs:wp.array(dtype = self.face_struct)):
             face_id = wp.tid() # K
             # D is a C,3 array This is always 3
             owner_cell_id = face_structs[face_id].adjacent_cells[0]
-            face_idx = face_structs[face_id].cell_face_index[0]
-            normal = cell_structs[owner_cell_id].face_normal[face_idx]
             owner_D = D_cell[owner_cell_id]
             if face_structs[face_id].is_boundary == 1: #(up - ub)/distance *A
-                D_face[face_id] = wp.dot(normal,wp.cw_mul(normal,owner_D))
+                D_face[face_id] = owner_D
             else:
                 neighbor_cell_id = face_structs[face_id].adjacent_cells[1]
                 neighbor_D = D_cell[neighbor_cell_id]
                 
                 D_f = face_structs[face_id].norm_distance[0]*owner_D + face_structs[face_id].norm_distance[1]*neighbor_D
-                D_face[face_id] = wp.dot(D_f,wp.cw_mul(normal,normal))
+                D_face[face_id] = D_f
         
 
         @wp.kernel
@@ -115,14 +113,14 @@ class Pressure_correction_Ops(Ops):
 
     def calculate_D_at_cells(self,D_cell:wp.array,inv_A:wp.array,cells:wp.array):
         assert len(inv_A.shape) == 1
-        wp.launch(self._calculate_D_at_cells,dim = cells.shape[0],inputs= [D_cell,inv_A.reshape((-1,3)),cells])
+        wp.launch(self._calculate_D_at_cells,dim = cells.shape[0],inputs= [D_cell,inv_A,cells])
 
-    def interpolate_D_to_face(self,D_face,D_cell,cells,faces):
-        wp.launch(self._interpolate_D_to_face,dim = faces.shape[0],inputs= [D_face,D_cell,cells,faces])
+    def interpolate_D_to_face(self,D_face,D_cell,faces):
+        wp.launch(self._interpolate_D_to_face,dim = faces.shape[0],inputs= [D_face,D_cell,faces])
 
     def calculate_D_viscosity(self,D_cell,D_face,inv_A,cells,faces):
         self.calculate_D_at_cells(D_cell,inv_A,cells)
-        self.interpolate_D_to_face(D_face,D_cell,cells,faces)
+        self.interpolate_D_to_face(D_face,D_cell,faces)
 
     def interpolate_p_correction_to_faces(self,p_correction,p_correction_face,faces):
         wp.launch(kernel=self._interpolate_p_correction_to_faces,dim = (faces.shape[0]),inputs = [p_correction,p_correction_face,faces])

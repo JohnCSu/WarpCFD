@@ -1,7 +1,7 @@
 import warp as wp
 from typing import Any
 @wp.func
-def central_difference(cell_values:wp.array(dtype = Any),
+def central_difference(cell_values:wp.array2d(dtype = Any),
                        owner_cell:Any,
                         neighbor_cell:Any,
                         face:Any,
@@ -11,7 +11,7 @@ def central_difference(cell_values:wp.array(dtype = Any),
     return cell_values[owner_cell.id,output]*psi + psi_2*cell_values[neighbor_cell.id,output]
 
 @wp.func
-def upwind( cell_values:wp.array(dtype=Any),
+def upwind( cell_values:wp.array2d(dtype=Any),
             owner_cell:Any,
             neighbor_cell:Any,
             face:Any,

@@ -20,7 +20,7 @@ class intermediate_velocity_step():
         self.float_dtype = mesh_ops.float_dtype
         self.int_dtype = mesh_ops.int_dtype
         self.dimension = mesh_ops.dimension
-        self.u_relaxation_factor = 1.
+        self.u_relaxation_factor = 0.7
     def init(self,cells,faces):
 
        
@@ -49,19 +49,21 @@ class intermediate_velocity_step():
         self.vel_matrix_rows = self.vel_matrix.uncompress_rows()
     
 
-    def solve(self,initial_vel,intermediate_vel,cells,faces,laplacian_weights,convection_weights,density,vel_indices):
+    def solve(self,initial_vel,intermediate_vel,cell_values,cell_gradients,cells,faces,laplacian_weights,convection_weights,density,vel_indices):
         self.reset()
         self.matrix_ops.calculate_BSR_matrix_and_RHS(self.vel_matrix,cells,faces,laplacian_weights,output_indices=vel_indices,b = self.H,rows= self.vel_matrix_rows,flip_sign = True)
         self.matrix_ops.calculate_BSR_matrix_and_RHS(self.vel_matrix,cells,faces,convection_weights,output_indices=vel_indices,b = self.H,rows= self.vel_matrix_rows,flip_sign= False)
-        self.mesh_ops.fill_x_array_from_struct(intermediate_vel,cells,vel_indices)
-        self.matrix_ops.form_p_grad_vector(self.grad_P,cells,density)
+        # self.mesh_ops.fill_x_array_from_struct(intermediate_vel,cells,vel_indices)
+        # self.matrix_ops.fill_matrix_vector_from_outputs(cell_values,intermediate_vel,vel_indices)
+        wp.copy(intermediate_vel,initial_vel)
+        self.matrix_ops.form_p_grad_vector(self.grad_P,cell_gradients,cells,density)
         self.matrix_ops.get_b_vector(self.H,self.grad_P,self.b)
         
         # wp.copy(self.intermediate_vel,initial_vel) # Use velocity at current iteration as initial guess
         result = self.matrix_ops.solve_Axb(A = self.vel_matrix,x = intermediate_vel,b = self.b)
         print(result)
         
-        self.inv_A = sparse.bsr_get_diag(self.vel_matrix)
+        sparse.bsr_get_diag(self.vel_matrix,self.inv_A)
         inv_1D_array(self.inv_A,self.inv_A) # Invert A i.e. 1/a_i
 
         # Relax velocity
@@ -69,7 +71,7 @@ class intermediate_velocity_step():
         sub_1D_array(intermediate_vel,initial_vel,intermediate_vel)
         mult_scalar_1D_array(intermediate_vel,self.u_relaxation_factor,intermediate_vel)
         add_1D_array(initial_vel,intermediate_vel,intermediate_vel)
-        self.mesh_ops.fill_struct_from_x_array(intermediate_vel,cells,vel_indices)
+        self.matrix_ops.fill_outputs_from_matrix_vector(cell_values,intermediate_vel,vel_indices)
 
         return self.vel_matrix,self.b,self.inv_A
     

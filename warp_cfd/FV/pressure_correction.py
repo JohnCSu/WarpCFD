@@ -63,23 +63,25 @@ class pressure_correction_step():
 
     def reset(self):
         self.p_correction_matrix.values.zero_()
+        self.p_correction.zero_()
         self.div_u.zero_()
 
 
-    def solve(self,intermediate_vel,corrected_vel,D_face,cells,faces):
+    def solve(self,intermediate_vel,corrected_vel,cell_values,D_face,cells,faces):
         self.reset()
         vel_indices = self.vel_indices
         p_index = self.p_index
         
-        self.mesh_ops.calculate_divergence(self.div_u,cells)
+        self.mesh_ops.calculate_divergence(self.div_u,cells,False)
         # print(self.div_u.numpy())
         weights = self.weights
+        # D_face2 = wp.ones_like(D_face)
         self.pressure_correction_ops.calculate_p_correction_weights(D_face,cells,faces,weights)
         
        
         self.matrix_ops.calculate_BSR_matrix_and_RHS(self.p_correction_matrix,cells,faces,weights,output_indices=self.p_correction_index,rows = self.p_correction_matrix_rows,flip_sign= False) # only calculate BSR Values
         self.matrix_ops.update_p_correction_rows(self.p_correction_matrix,self.div_u)
-        print(self.p_correction_matrix.values.numpy().mean())
+        # print(self.p_correction_matrix.values.numpy().mean())
         results = self.matrix_ops.solve_Axb(self.p_correction_matrix,self.p_correction,self.div_u)
         print(results)
         # print(self.p_correction)
@@ -93,13 +95,13 @@ class pressure_correction_step():
         # add correction to intermediate velocity
         add_1D_array(intermediate_vel,self.velocity_correction,corrected_vel)
 
-        self.mesh_ops.fill_struct_from_x_array(corrected_vel,cells,vel_indices)
+        self.matrix_ops.fill_outputs_from_matrix_vector(cell_values,corrected_vel,vel_indices)
 
         # Update pressure p_old +relax*p'
-        self.mesh_ops.fill_x_array_from_struct(self.p,cells,p_index)
+        self.matrix_ops.fill_matrix_vector_from_outputs(cell_values,self.p,p_index)
         mult_scalar_1D_array(self.p_correction,self.p_relaxation_factor,self.p_correction)
         add_1D_array(self.p,self.p_correction,self.p)
 
-        self.mesh_ops.fill_struct_from_x_array(self.p,cells,p_index)
+        self.matrix_ops.fill_outputs_from_matrix_vector(cell_values,self.p,p_index)
 
         return self.p,self.div_u,self.p_correction,self.velocity_correction

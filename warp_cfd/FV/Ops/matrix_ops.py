@@ -114,14 +114,14 @@ class Matrix_Ops(Ops):
             wp.atomic_add(b,row,scale*weights[cell_id,face_idx,output].neighbor )
 
         @wp.kernel
-        def form_p_grad_vector_kernel(b:wp.array(dtype=self.float_dtype),
-                                            cell_structs: wp.array(dtype=self.cell_struct),density:self.float_dtype):
+        def form_p_grad_vector_kernel(p_grad:wp.array(dtype=self.float_dtype),cell_gradients:wp.array2d(dtype=self.vector_type),
+                                            cell_structs: wp.array(dtype=self.cell_struct),density:self.float_dtype ):
                 i,dim = wp.tid() # Go by 
                 D = wp.static(self.dimension)
                 p = wp.static(self.int_dtype(3))
                 row = i*D + dim
                 # wp.printf('n1 %f n2 %f n3 %f \n',cell_structs[i].grads[p][0],cell_structs[i].grads[p][1],cell_structs[i].grads[p][2])
-                b[row] =  cell_structs[i].gradients[p][dim]/density*cell_structs[i].volume
+                p_grad[row] =  (cell_gradients[i,p][dim])*cell_structs[i].volume
             
 
 
@@ -146,9 +146,31 @@ class Matrix_Ops(Ops):
             
             b[cell_id] = 0. # Replace the div u with 0 to indicate no pressure correction
 
+        
+
+        @wp.kernel
+        def _fill_matrix_vector_from_outputs(arr:wp.array(dtype=self.float_dtype),cell_values:wp.array2d(dtype=self.float_dtype),output_indices:wp.array(dtype = self.int_dtype)):
+            i,output_idx = wp.tid()
+            num_outputs = output_indices.shape[0]
+            output = output_indices[output_idx]
+            row = num_outputs*i + output_idx
+            arr[row] = cell_values[i,output]
+
+
+        @wp.kernel
+        def _fill_outputs_from_matrix_vector(arr:wp.array(dtype=self.float_dtype),cell_values:wp.array2d(dtype=self.float_dtype),output_indices:wp.array(dtype = self.int_dtype)):
+            i,output_idx = wp.tid()
+            num_outputs = output_indices.shape[0]
+            output = output_indices[output_idx]
+            row = num_outputs*i + output_idx
+            cell_values[i,output] = arr[row]
+
+
+
         self._form_p_grad_vector_kernel= form_p_grad_vector_kernel
         '''attribute to call method with which to form the pressure gradient vector'''
-        
+        self._fill_matrix_vector_from_outputs = _fill_matrix_vector_from_outputs
+        self._fill_outputs_from_matrix_vector = _fill_outputs_from_matrix_vector
         # self._calculate_BSR_matrix_and_RHS = calculate_BSR_matrix_and_RHS_kernel
         self._calculate_BSR_values = _calculate_BSR_values_kernel
         self._calculate_RHS_values = _calculate_RHS_values_kernel
@@ -159,6 +181,12 @@ class Matrix_Ops(Ops):
 
         self._update_p_correction_rows = _update_p_correction_rows_kernel #matrix ops
     
+    def fill_matrix_vector_from_outputs(self,cell_values,matrix_arr,output_indices):
+        wp.launch(kernel=self._fill_matrix_vector_from_outputs,dim = (self.num_cells,output_indices.shape[0]),inputs = [matrix_arr,cell_values,output_indices] )
+
+    def fill_outputs_from_matrix_vector(self,cell_values,matrix_arr,output_indices):
+        wp.launch(kernel=self._fill_outputs_from_matrix_vector,dim = (self.num_cells,output_indices.shape[0]),inputs = [matrix_arr,cell_values,output_indices] )
+    
     def calculate_BSR_matrix_indices(self,COO_array:COO_Arrays,cells,faces,num_outputs:int):
         wp.launch(kernel=self._get_matrix_indices,dim = [cells.shape[0],self.faces_per_cell+1,num_outputs],inputs = [COO_array.rows,
                                                                                                                   COO_array.cols,
@@ -167,7 +195,7 @@ class Matrix_Ops(Ops):
                                                                                                                   faces,
                                                                                                                   num_outputs
                                                                                                                   ])
-
+    
 
     def calculate_BSR_matrix_and_RHS(self,BSR_matrix:sparse.BsrMatrix,cells,faces,weights,output_indices:wp.array,flip_sign:bool,b:wp.array = None,rows =None):
         if rows is None:
@@ -192,8 +220,8 @@ class Matrix_Ops(Ops):
                                                                                                                     not flip_sign,
 
             ])
-    def form_p_grad_vector(self,grad_P,cells,density):
-        wp.launch(kernel=self._form_p_grad_vector_kernel, dim = [cells.shape[0],self.dimension], inputs = [grad_P,cells,density])
+    def form_p_grad_vector(self,grad_P,cell_gradients,cells,density):
+        wp.launch(kernel=self._form_p_grad_vector_kernel, dim = [cells.shape[0],self.dimension], inputs = [grad_P,cell_gradients,cells,density])
         
     
     def get_b_vector(self,H,grad_P,b):
@@ -201,7 +229,7 @@ class Matrix_Ops(Ops):
     
     def solve_Axb(self,A:sparse.BsrMatrix,x:wp.array,b:wp.array):
         M = linear.preconditioner(A)
-        return self.linear_solver(A =A,M= M, b = b,x = x,maxiter=500)
+        return self.linear_solver(A =A,M= M,tol = 1.e-6, b = b,x = x,maxiter=500)
     
     def update_p_correction_rows(self,bsr_matrix:sparse.BsrMatrix,div_u:wp.array):
         fixed_cells = self.cell_properties.fixed_cells
