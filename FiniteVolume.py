@@ -19,7 +19,7 @@ from warp_cfd.FV.Convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
 from warp_cfd.FV.intermediate_velocity import intermediate_velocity_step
 from warp_cfd.FV.pressure_correction import pressure_correction_step
-wp.config.mode = "debug"
+# wp.config.mode = "debug"
 # wp.config.verify_fp = True
 '''
 TODO:
@@ -36,6 +36,7 @@ FUTURE
 - Add LES
 
 '''
+wp.init()
 class CFD_settings:
     steady_state: bool = False
     face_interpolation: int = 'upwind-linear'
@@ -188,7 +189,9 @@ class FVM():
             'velocity_correction':self.Convergence.check('velocity_correction',velocity_correction) if velocity_correction is not None else np.nan,
             'pressure_correction':self.Convergence.check('pressure_correction',p_correction) if p_correction is not None else np.nan,
         }
-        
+
+        self.res = np.abs(Ax[:,1]-b[:,1])
+        # print('Cell ID', np.argmax())
         print(convergence)
         if log:
             self.Convergence.log(convergence)
@@ -216,19 +219,18 @@ class FVM():
             self.matrix_ops.fill_matrix_vector_from_outputs(self.cell_values,self.initial_velocity,self.vel_indices)
             self.update_flux(False)
             self.update_weights()
-        
-        
-        # print('vel',self.cell_values.numpy()[:,0:-1].flatten())
-        # print('initial vel',self.initial_velocity.numpy())
+
         vel_matrix,b,inv_A = self.intermediate_velocity_step.solve(self.initial_velocity,
                                                                    self.intermediate_velocity,
                                                                    self.cell_values,
                                                                    self.cell_gradients,
                                                                    self.cells,self.faces,self.laplacian_weights,self.convection_weights,self.density,self.vel_indices)
         grad_P=self.intermediate_velocity_step.grad_P.numpy()
+        H = self.intermediate_velocity_step.H.numpy()
+        # print(H)
         # print('vel',self.cell_values.numpy()[:,0:-1].flatten())
         # print('intermeditate vel',self.intermediate_velocity.numpy())
-        # print('p grad',self.cell_gradients.numpy()[:,-1,:])
+        print('p grad',self.cell_gradients.numpy()[:,-1,:])
         # print('grad_P', grad_P.reshape(-1,3))
         self.check_convergence(vel_matrix,self.initial_velocity,b,log= False)
         
@@ -238,23 +240,25 @@ class FVM():
         self.update_flux(True)
         self.check_convergence(vel_matrix,self.intermediate_velocity,b,log= False)
         self.pressure_correction_ops.calculate_D_viscosity(self.D_cell,self.D_face,inv_A,self.cells,self.faces)
-        # print('done!')
-        
-        # print('D Face',self.D_cell.numpy().__abs__().mean())
-        # print('divu',self.mesh_ops.calculate_divergence(None,self.cells).numpy())
-        p,div_u,p_correction,velocity_correction = self.pressure_correction_step.solve(self.intermediate_velocity,self.corrected_velocity,self.cell_values,self.D_face,self.cells,self.faces) 
-        p_corr_m = self.pressure_correction_step.p_correction_matrix
+        # # print('done!')
+        '''
+        If a value is not assigned 
+        '''
+        # # print('D Face',self.D_cell.numpy().__abs__().mean())
+        # # print('divu',self.mesh_ops.calculate_divergence(None,self.cells).numpy())
+        # p,div_u,p_correction,velocity_correction = self.pressure_correction_step.solve(self.intermediate_velocity,self.corrected_velocity,self.cell_values,self.D_face,self.cells,self.faces) 
+        # p_corr_m = self.pressure_correction_step.p_correction_matrix
 
-        print('p_corr')
-        # arr = bsr_to_coo_array(p_corr_m).toarray()
-        # print((arr))
-        # print('div u',self.mesh_ops.calculate_divergence(None,self.cells).numpy())
+        # print('p_corr')
+        # # arr = bsr_to_coo_array(p_corr_m).toarray()
+        # # print((arr))
+        # # print('div u',self.mesh_ops.calculate_divergence(None,self.cells).numpy())
 
         
-        wp.copy(self.initial_velocity,self.corrected_velocity)
-        self.update_flux(True)
-        converged = self.check_convergence(vel_matrix,self.corrected_velocity,b,div_u,velocity_correction,p_correction)
-        self.update_weights()
+        # wp.copy(self.initial_velocity,self.corrected_velocity)
+        # self.update_flux(True)
+        # converged = self.check_convergence(vel_matrix,self.corrected_velocity,b,div_u,velocity_correction,p_correction)
+        # self.update_weights()
         
         self.steps += 1
         # return converged
@@ -287,8 +291,9 @@ def pouiselle_flow(xyz,width,G = 1.,nu = 0.01):
 
 if __name__ == '__main__':
     from grid import create_hex_grid
-    n = 15
-    w,l = 1.,4.
+    
+    n = 41
+    w,l = 1.,1.
     G,nu = 1,1
     m = create_hex_grid(n,n,1,(w/n,l/n,0.1))
 
@@ -301,18 +306,20 @@ if __name__ == '__main__':
     m.set_boundary_value('-X',u = 0,v = 0,w = 0) # No Slip
     m.set_boundary_value('-Y',u = 0,v = inlet,w = 0) # No Slip
     # m.set_boundary_value('-Y',p=0)
-    m.set_boundary_value('+Y',u = 0,v = inlet,w = 0) # Velocity Inlet
+    # m.set_boundary_value('+Y',u = 0,v = inlet,w = 0) # Velocity Inlet
     # m.set_boundary_value('-Y',p = 0.) # No Slip
     # m.set_boundary_value('+Y',p = 1.) # Velocity Inlet
-
+    '''
+    Add check that All bf have some fixed value => Boundary IDs should equal same length as boundary faces
+    '''
 
     m.set_gradient_value('-Z',u=0,v=0,w=0,p=0) # No penetration condition
     m.set_gradient_value('+Z',u=0,v=0,w=0,p=0) # No penetration condition
     m.set_gradient_value('+X',p = 0) # No Slip
     m.set_gradient_value('-X',p = 0) # No Slip
-    # m.set_gradient_value('-Y',u=0,v=0,w=0) # No Slip
-    # m.set_gradient_value('+Y',p = 0) # Velocity Inlet
-    # m.set_gradient_value('-Y',p = 0) # Velocity Inlet
+    m.set_gradient_value('-Y',u=0,v=0,w=0) # No Slip
+    m.set_gradient_value('+Y',p = 0) # Velocity Inlet
+    m.set_gradient_value('-Y',p = 0) # Velocity Inlet
     
     m.set_cell_value(0,p= 0)
 
@@ -329,12 +336,14 @@ if __name__ == '__main__':
     results.cell_data['p'] = IC[:,-1]
     results.cell_data['u'] = IC[:,0]
     results.cell_data['v'] = IC[:,1]
+
+    
     # results.plot(scalars="u", cmap="jet", show_scalar_bar=True)
-    # results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
+    results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
     # results.plot(scalars="v", cmap="jet", show_scalar_bar=True)
     
     np.set_printoptions(linewidth=300,threshold=100000,precision = 5)
-    model.MAX_STEPS = 10
+    model.MAX_STEPS = 1
     for i in range(model.MAX_STEPS):
         print(model.step())
         
@@ -348,8 +357,8 @@ if __name__ == '__main__':
     # print('intermediate vel',model.intermediate_velocity.numpy().max())
     # print(b.velocity_correction)
     # print(model.corrected_velocity.numpy().max())
-    velocity = model.corrected_velocity.numpy().reshape(-1,3)
-    
+    velocity = model.initial_velocity.numpy().reshape(-1,3)
+    p = model.cell_values.numpy()[:,-1]
     u = velocity[:,0]
     v = velocity[:,1]
     z = velocity[:,2]
@@ -381,22 +390,31 @@ if __name__ == '__main__':
     p_corr = model.pressure_correction_step.p_correction.numpy()
     results.cell_data['p_corr'] = p_corr
     model.Convergence.plot_residuals()
+    
+    results.cell_data['res_v'] = model.res
+    
+    results.plot(scalars='res_v', cmap="jet",how_scalar_bar=True)
     # results.plot(scalars="u", cmap="jet", show_scalar_bar=True)
     # results.plot(scalars="p", cmap="jet", show_scalar_bar=True)
     # results.plot(scalars="v", cmap="jet", show_scalar_bar=True)
     # results.plot(scalars="p_corr", cmap="jet", show_scalar_bar=True)
-    
-    plt.plot(x[n//2],v_05)
-    plt.plot(x[n//2],inlet)
+    for i,xx in enumerate(x):
+        vv = v.reshape(n,n)[i]
+        plt.plot(x[n-1],vv,label = f'{i}')  
+    # plt.plot(x[n-1],v_05)
+    plt.plot(x[n-1],inlet,label = 'Truth')
+    plt.legend()
     plt.show()
 
-    plt.plot(y[n//2],u_05)
-    # plt.plot(x?[n//2],inlet)
-    plt.show()
+    # plt.plot(y[n//2],u_05)
+    # # plt.plot(x?[n//2],inlet)
+    # plt.show()
     
     y,P = np.sort( np.stack([m.cell_centroids[:,1],IC[:,-1]],axis = 0),axis = 1)
 
-    plt.plot(y,P)
+    plt.plot(y,P,label = 'True')
+    plt.plot(y,p,label = 'FV')
+    plt.legend()
     plt.show()
 
     # print(0.2/v_05.max())
