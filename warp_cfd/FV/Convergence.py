@@ -12,7 +12,7 @@ class Criteria:
         self.ord = ord
         self.is_converged = False
         self.is_flux = is_flux
-        self.non_zero = 1e-8
+        self.non_zero = 1e-6
         if is_flux and (self.tol == 'abs'):
             raise ValueError('is_flux must be used with relative tolerance')
 
@@ -78,6 +78,7 @@ class Convergence:
             name = criteria.name
             y = [step[name][0] for step in self.log_list]
             plt.plot(x,y, label = name)
-        plt.ylim((0,1))
+        # plt.ylim((0,1))
+        plt.yscale('log')
         plt.legend()
         plt.show()

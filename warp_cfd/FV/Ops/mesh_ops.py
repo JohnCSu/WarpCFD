@@ -104,8 +104,8 @@ class Mesh_Ops(Ops):
             neighbor_face_idx = face_structs[face_id].cell_face_index[1]
             normal = owner_cell.face_normal[owner_face_idx]
 
-            owner_grad = cell_gradients[owner_cell.id][p]
-            neighbor_grad = cell_gradients[neighbor_cell.id][p]
+            owner_grad = cell_gradients[owner_cell.id,p]
+            neighbor_grad = cell_gradients[neighbor_cell.id,p]
 
             p_grad = (cell_values[neighbor_cell.id,p] - cell_values[owner_cell.id,p])
             p_grad_avg = owner_grad*face_structs[face_id].norm_distance[0] + neighbor_grad*face_structs[face_id].norm_distance[1]
@@ -133,7 +133,7 @@ class Mesh_Ops(Ops):
                                           boundary_face_ids:wp.array(dtype= self.face_properties.boundary_face_ids.dtype),
                                           output_indices:wp.array(dtype=self.int_dtype)):
             
-            i,output_idx = wp.tid() # Loop through internal faces only
+            i,output_idx = wp.tid() # Loop through Boundary faces only
             output = output_indices[output_idx]
             face_id = boundary_face_ids[i]
             adjacent_cell_ids = face_structs[face_id].adjacent_cells
@@ -144,6 +144,7 @@ class Mesh_Ops(Ops):
 
             if face_structs[face_id].gradient_is_fixed[output]: # We only do face interpolation if the gradient is fixed
                 face_values[face_id,output] = distance*face_gradients[face_id,output] + cell_values[owner_cell.id,output]
+                # wp.printf('%d %f %f %f %f \n',output,face_values[face_id,output],face_gradients[face_id,output],distance,cell_values[owner_cell.id,output])
         @wp.kernel
         def _calculate_mass_flux_kernel(face_values:wp.array2d(dtype=self.float_dtype),cell_structs:wp.array(dtype = self.cell_struct),
                                   face_structs:wp.array(dtype = self.face_struct),
@@ -153,13 +154,10 @@ class Mesh_Ops(Ops):
             face_id = cell_structs[i].faces[j]
             normal = cell_structs[i].face_normal[j]
             area = face_structs[face_id].area
-            
             #Compute dot product
-            dot_prod = wp.static(self.float_dtype(0.))
-            for k in range(3):
-              dot_prod += face_values[face_id,k]*normal[k] 
+            v = wp.vector(face_values[face_id,0],face_values[face_id,1],face_values[face_id,2])
 
-            cell_structs[i].mass_fluxes[j] = dot_prod*area
+            cell_structs[i].mass_fluxes[j] = wp.dot(v,normal)*area
             
         @wp.kernel
         def _calculate_gradients_kernel(face_values:wp.array2d(dtype=self.float_dtype),
@@ -169,11 +167,6 @@ class Mesh_Ops(Ops):
                                         node_structs:wp.array(dtype= self.node_struct),
                                         output_indices:wp.array(dtype=self.int_dtype),
                                         ):
-            '''
-            There is an issue with directly manipulatng a matrix contained inside an array or struct so we need to create a copy
-
-            THIS NEED TO BE CHANGED IN THE FUTURE
-            '''
             #Lets Use Gauss Linear from openFoam for now
             i,face_idx,output_idx = wp.tid() #C, faces_per_cell, num_outputs
             output = output_indices[output_idx]

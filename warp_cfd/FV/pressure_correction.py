@@ -79,14 +79,14 @@ class pressure_correction_step():
         self.pressure_correction_ops.calculate_p_correction_weights(D_face,cells,faces,weights)
         
        
-        self.matrix_ops.calculate_BSR_matrix_and_RHS(self.p_correction_matrix,cells,faces,weights,output_indices=self.p_correction_index,rows = self.p_correction_matrix_rows,flip_sign= False) # only calculate BSR Values
+        self.matrix_ops.calculate_BSR_matrix(self.p_correction_matrix,cells,weights,output_indices=self.p_correction_index,rows = self.p_correction_matrix_rows,flip_sign= False) # only calculate BSR Values
         self.matrix_ops.update_p_correction_rows(self.p_correction_matrix,self.div_u)
         # print(self.p_correction_matrix.values.numpy().mean())
         results = self.matrix_ops.solve_Axb(self.p_correction_matrix,self.p_correction,self.div_u)
-        print(results)
+        # print(results)
         # print(self.p_correction)
 
-        # Calculate 1/ap grap P
+        # Calculate Vp/ap grap P
         self.calculate_pressure_gradient(self.p_correction,self.p_correction_face,self.velocity_correction,D_face,cells,faces)
         # print('hi',self.velocity_correction)
         # Calc velocity correction :=  - Vp/ap *gradp'

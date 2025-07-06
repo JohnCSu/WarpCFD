@@ -6,3 +6,8 @@ def create_weight_struct(float_dtype = wp.float32):
         owner: float_dtype 
         neighbor: float_dtype
     return Weights
+
+
+
+    
+

@@ -16,14 +16,14 @@ class Pressure_correction_Ops(Ops):
 
         @wp.kernel
         def _calculate_D_at_cells_kernel(D_cell:wp.array(dtype=self.float_dtype),
-                                         inv_A:wp.array(dtype=self.float_dtype),
+                                         Ap:wp.array(dtype=self.float_dtype),
                                          cell_structs:wp.array(dtype=self.cell_struct)
                                          ):
             i = wp.tid() # By Cells
             # diagonals for a cell in u,v,w are always the same for isotropic viscosity
             D = 3
             row = i*D
-            D_cell[i] = inv_A[row]*cell_structs[i].volume
+            D_cell[i] = cell_structs[i].volume/Ap[row]
 
 
 
@@ -111,15 +111,15 @@ class Pressure_correction_Ops(Ops):
         wp.launch(kernel= self._p_correction_laplacian,dim = [cells.shape[0],self.faces_per_cell,1],inputs=[cells,faces,weights,D_face])
         
 
-    def calculate_D_at_cells(self,D_cell:wp.array,inv_A:wp.array,cells:wp.array):
-        assert len(inv_A.shape) == 1
-        wp.launch(self._calculate_D_at_cells,dim = cells.shape[0],inputs= [D_cell,inv_A,cells])
+    def calculate_D_at_cells(self,D_cell:wp.array,Ap:wp.array,cells:wp.array):
+        assert len(Ap.shape) == 1
+        wp.launch(self._calculate_D_at_cells,dim = cells.shape[0],inputs= [D_cell,Ap,cells])
 
     def interpolate_D_to_face(self,D_face,D_cell,faces):
         wp.launch(self._interpolate_D_to_face,dim = faces.shape[0],inputs= [D_face,D_cell,faces])
 
-    def calculate_D_viscosity(self,D_cell,D_face,inv_A,cells,faces):
-        self.calculate_D_at_cells(D_cell,inv_A,cells)
+    def calculate_D_viscosity(self,D_cell,D_face,Ap,cells,faces):
+        self.calculate_D_at_cells(D_cell,Ap,cells)
         self.interpolate_D_to_face(D_face,D_cell,faces)
 
     def interpolate_p_correction_to_faces(self,p_correction,p_correction_face,faces):

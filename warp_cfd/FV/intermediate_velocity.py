@@ -21,6 +21,7 @@ class intermediate_velocity_step():
         self.int_dtype = mesh_ops.int_dtype
         self.dimension = mesh_ops.dimension
         self.u_relaxation_factor = 0.7
+        self.relax = True
     def init(self,cells,faces):
 
        
@@ -45,35 +46,41 @@ class intermediate_velocity_step():
                                                       values = self.vel_COO_array.values,
                                                       prune_numerical_zeros= False)
         
-        self.inv_A = wp.zeros(shape = self.vel_matrix.shape[0],dtype = self.float_dtype)
+        self.Ap = wp.zeros(shape = self.vel_matrix.shape[0],dtype = self.float_dtype)
         self.vel_matrix_rows = self.vel_matrix.uncompress_rows()
     
 
     def solve(self,initial_vel,intermediate_vel,cell_values,cell_gradients,cells,faces,laplacian_weights,convection_weights,density,vel_indices):
         self.reset()
-        self.matrix_ops.calculate_BSR_matrix_and_RHS(self.vel_matrix,cells,faces,laplacian_weights,output_indices=vel_indices,b = self.H,rows= self.vel_matrix_rows,flip_sign = True)
-        self.matrix_ops.calculate_BSR_matrix_and_RHS(self.vel_matrix,cells,faces,convection_weights,output_indices=vel_indices,b = self.H,rows= self.vel_matrix_rows,flip_sign= False)
-        # self.mesh_ops.fill_x_array_from_struct(intermediate_vel,cells,vel_indices)
-        # self.matrix_ops.fill_matrix_vector_from_outputs(cell_values,intermediate_vel,vel_indices)
-        wp.copy(intermediate_vel,initial_vel)
+
+        # Form Weights the implicit need to change the sign of the laplacian
+        self.matrix_ops.calculate_BSR_matrix(self.vel_matrix,cells,laplacian_weights,output_indices=vel_indices,rows= self.vel_matrix_rows,flip_sign = True)
+        # The RHS does not need
+        self.matrix_ops.calculate_RHS(self.H,faces,laplacian_weights,output_indices= vel_indices,flip_sign=False)
+
+        
+        self.matrix_ops.calculate_BSR_matrix(self.vel_matrix,cells,convection_weights,output_indices=vel_indices,rows= self.vel_matrix_rows,flip_sign= False)
+        self.matrix_ops.calculate_RHS(self.H,faces,convection_weights,output_indices= vel_indices,flip_sign=True)
+
+        
+        # Form RHS Vector
         self.matrix_ops.form_p_grad_vector(self.grad_P,cell_gradients,cells,density)
         self.matrix_ops.get_b_vector(self.H,self.grad_P,self.b)
         
-        # wp.copy(self.intermediate_vel,initial_vel) # Use velocity at current iteration as initial guess
+        
+        sparse.bsr_get_diag(self.vel_matrix,self.Ap)
+        if self.relax:
+            self.matrix_ops.implitict_relaxation(self.vel_matrix,self.b,cell_values,self.u_relaxation_factor,output_indices=vel_indices,rows= self.vel_matrix_rows)
+        
+        # Use velocity at current iteration as initial guess
+        
+        wp.copy(intermediate_vel,initial_vel)
         result = self.matrix_ops.solve_Axb(A = self.vel_matrix,x = intermediate_vel,b = self.b)
-        print(result)
+        # print(result)
         
-        sparse.bsr_get_diag(self.vel_matrix,self.inv_A)
-        inv_1D_array(self.inv_A,self.inv_A) # Invert A i.e. 1/a_i
-
-        # Relax velocity
-        
-        sub_1D_array(intermediate_vel,initial_vel,intermediate_vel)
-        mult_scalar_1D_array(intermediate_vel,self.u_relaxation_factor,intermediate_vel)
-        add_1D_array(initial_vel,intermediate_vel,intermediate_vel)
         self.matrix_ops.fill_outputs_from_matrix_vector(cell_values,intermediate_vel,vel_indices)
 
-        return self.vel_matrix,self.b,self.inv_A
+        return self.vel_matrix,self.b,self.Ap
     
 
     def reset(self):

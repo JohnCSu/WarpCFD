@@ -1,0 +1,5 @@
+*.ipynb
+*.npy
+1_0/*
+OtherCFD/*
+*__pycache__*
