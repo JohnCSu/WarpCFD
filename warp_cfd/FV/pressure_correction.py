@@ -67,12 +67,12 @@ class pressure_correction_step():
         self.div_u.zero_()
 
 
-    def solve(self,intermediate_vel,corrected_vel,cell_values,D_face,cells,faces):
+    def solve(self,intermediate_vel,corrected_vel,cell_values,D_face,mass_fluxes,cells,faces):
         self.reset()
         vel_indices = self.vel_indices
         p_index = self.p_index
         
-        self.mesh_ops.calculate_divergence(self.div_u,cells,False)
+        self.mesh_ops.calculate_divergence(mass_fluxes,self.div_u,cells,False)
         # print(self.div_u.numpy())
         weights = self.weights
         # D_face2 = wp.ones_like(D_face)

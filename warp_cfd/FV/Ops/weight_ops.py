@@ -13,7 +13,7 @@ class Weights_Ops(Ops):
         - Calculate Convection And Laplacian Weights
         '''
         @wp.kernel
-        def _calculate_convection_weights_kernel(face_values:wp.array2d(dtype = self.float_dtype),
+        def _calculate_convection_weights_kernel(mass_fluxes:wp.array2d(dtype = self.float_dtype),face_values:wp.array2d(dtype = self.float_dtype),
                                                  cell_structs:wp.array(dtype = self.cell_struct),
                                 face_structs:wp.array(dtype = self.face_struct),
                                 weights:wp.array(ndim=3,dtype=self.weight_struct),
@@ -27,22 +27,21 @@ class Weights_Ops(Ops):
             
             if face_structs[face_id].is_boundary == 1:
                 weights[i,j,output].owner = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-                weights[i,j,output].neighbor = cell_structs[i].mass_fluxes[j]*face_values[face_id,output]
+                weights[i,j,output].neighbor = mass_fluxes[i,j]*face_values[face_id,output]
             else:
                 owner_face_id = cell_structs[i].face_sides[j] # Returns if current cell i is on the 0 side of face or 1 side of face
                 adj_face_id = wp.static(self.int_dtype(1)) - owner_face_id # Apply not operation to get the other index (can only be 1 or 0)
                 
-                
                 if interpolation == 0: # Central Differencing
-                    weights[i,j,output].owner = face_structs[face_id].norm_distance[owner_face_id]*cell_structs[i].mass_fluxes[j]
-                    weights[i,j,output].neighbor = face_structs[face_id].norm_distance[adj_face_id]*cell_structs[i].mass_fluxes[j]
+                    weights[i,j,output].owner = face_structs[face_id].norm_distance[owner_face_id]*mass_fluxes[i,j]
+                    weights[i,j,output].neighbor = face_structs[face_id].norm_distance[adj_face_id]*mass_fluxes[i,j]
                 elif interpolation == 1: # Upwind
-                    if cell_structs[i].mass_fluxes[j] > 0:
-                        weights[i,j,output].owner = cell_structs[i].mass_fluxes[j]
+                    if mass_fluxes[i,j] > 0:
+                        weights[i,j,output].owner = mass_fluxes[i,j]
                         weights[i,j,output].neighbor = 0.
                     else:
                         weights[i,j,output].owner = 0.
-                        weights[i,j,output].neighbor = cell_structs[i].mass_fluxes[j]
+                        weights[i,j,output].neighbor = mass_fluxes[i,j]
         @wp.kernel
         def _interpolate_viscosity_to_face_kernel(cell_viscosity:wp.array(dtype=self.float_dtype),face_viscosity:wp.array(dtype=self.float_dtype),face_structs:wp.array(dtype=self.face_struct)):
             face_id = wp.tid()
@@ -75,7 +74,7 @@ class Weights_Ops(Ops):
             if face_structs[face_id].is_boundary == 1: #(up - ub)/distance *A
                 if face_structs[face_id].gradient_is_fixed[output]:
                     weights[i,j,output].owner = 0.
-                    weights[i,j,output].neighbor = face_gradients[face_id,output]
+                    weights[i,j,output].neighbor = nu*face_structs[face_id].area*face_gradients[face_id,output]
                 else:
                     cell_centroid_to_face_centroid_magnitude = wp.length(cell_structs[i].cell_centroid_to_face_centroid[j])
                     weight = nu*(face_structs[face_id].area)/cell_centroid_to_face_centroid_magnitude
@@ -97,12 +96,12 @@ class Weights_Ops(Ops):
         self._interpolate_viscosity_to_face = _interpolate_viscosity_to_face_kernel
 
     
-    def calculate_convection(self,face_values,cells,faces,weights,output_indices:wp.array,interpolation_method = 1):
+    def calculate_convection(self,mass_fluxes,face_values,cells,faces,weights,output_indices:wp.array,interpolation_method = 1):
         num_outputs = len(output_indices)
         num_faces = faces.shape[0]
         num_cells = cells.shape[0]
         
-        wp.launch(kernel=self._calculate_convection_weights,dim = (num_cells,self.faces_per_cell,num_outputs),inputs = [face_values,cells,faces,weights,output_indices,interpolation_method])
+        wp.launch(kernel=self._calculate_convection_weights,dim = (num_cells,self.faces_per_cell,num_outputs),inputs = [mass_fluxes,face_values,cells,faces,weights,output_indices,interpolation_method])
     
 
     def calculate_laplacian(self,face_values,face_gradients,cells,faces,weights,output_indices:wp.array,viscosity: float | wp.array):

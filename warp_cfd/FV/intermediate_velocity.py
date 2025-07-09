@@ -33,7 +33,7 @@ class intermediate_velocity_step():
         self.grad_P = wp.zeros_like(src = self.H)
         self.b = wp.zeros_like(src = self.H)
         
-        # self.intermediate_vel = wp.zeros_like(src = self.H)
+        self.intermediate_vel = wp.zeros_like(src = self.H)
         self.matrix_ops.calculate_BSR_matrix_indices(self.vel_COO_array,cells,faces,num_outputs = 3)
         '''
         Each Cell results in 3 rows. Each Row would have 1 + num neighbors. We can actually calculate this beforehand

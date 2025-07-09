@@ -30,7 +30,7 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,num_outputs = 4,di
         '''(F,D) matrix with D Vector containg the distance from the cell centroid to the corresponding face centroid'''
         
         mass_fluxes: vector(length=faces_per_cell,dtype = float_dtype)
-        ''' Store the flux dot(u,n)*A'''
+        # ''' Store the flux dot(u,n)*A'''
         face_sides: vector(length=faces_per_cell,dtype = int_dtype)
         '''(F) Vector indicating for the face which side of the face it is on (0 or 1 side)'''
 
