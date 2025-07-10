@@ -2,7 +2,7 @@ import warp as wp
 from typing import Any
 @wp.func
 def central_difference(cell_values:wp.array2d(dtype = Any),
-                       mass_fluxes:wp.array2d(dtype = Any),
+                       mass_fluxes:wp.array(dtype = Any),
                        owner_cell:Any,
                         neighbor_cell:Any,
                         face:Any,
@@ -14,13 +14,13 @@ def central_difference(cell_values:wp.array2d(dtype = Any),
 
 @wp.func
 def upwind( cell_values:wp.array2d(dtype=Any),
-           mass_fluxes:wp.array2d(dtype = Any),
+           mass_fluxes:wp.array(dtype = Any),
             owner_cell:Any,
             neighbor_cell:Any,
             face:Any,
             output:int):
-    j = face.cell_face_index[0]
-    if mass_fluxes[owner_cell.id,j] > 0:
+    
+    if mass_fluxes[face.id] > 0:
         return cell_values[owner_cell.id,output]
     else:
         return cell_values[neighbor_cell.id,output]

@@ -54,7 +54,7 @@ class Mesh_Ops(Ops):
                 cell_values[i,output] = fixed_value[i][output]
             
         @wp.kernel
-        def _internal_calculate_face_interpolation_kernel(mass_fluxes:wp.array2d(dtype = self.float_dtype),
+        def _internal_calculate_face_interpolation_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
                                                           cell_values:wp.array2d(dtype = self.float_dtype),
                                                           face_values:wp.array2d(dtype=self.float_dtype),
                                                           face_structs:wp.array(dtype=self.face_struct),
@@ -81,10 +81,8 @@ class Mesh_Ops(Ops):
                 face_values[face_id,output]= wp.nan
 
         
-
-
         @wp.kernel
-        def _rhie_chow_correction_kernel(mass_fluxes:wp.array2d(dtype = self.float_dtype),
+        def _rhie_chow_correction_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
                                          cell_values:wp.array2d(dtype = self.float_dtype),
                                          face_values:wp.array2d(dtype = self.float_dtype),
                                          cell_gradients:wp.array2d(dtype=self.vector_type),
@@ -102,7 +100,7 @@ class Mesh_Ops(Ops):
             owner_cell = cell_structs[adjacent_cell_ids[0]]
             neighbor_cell = cell_structs[adjacent_cell_ids[1]] 
             owner_face_idx = face_structs[face_id].cell_face_index[0]
-            neighbor_face_idx = face_structs[face_id].cell_face_index[1]
+            
             normal = owner_cell.face_normal[owner_face_idx]
 
             owner_grad = cell_gradients[owner_cell.id,p]
@@ -116,13 +114,10 @@ class Mesh_Ops(Ops):
             vec_norm = wp.vector(face_values[face_id,0],face_values[face_id,1],face_values[face_id,2]) 
             
             v = wp.dot(vec_norm,normal)
-            # for j in range(3):
-            #     v += vec_norm[j]*normal[j]
-            
-            v = v -D_face[face_id]*rhie_chow
 
-            mass_fluxes[owner_cell.id,owner_face_idx] = v*face_structs[face_id].area
-            mass_fluxes[neighbor_cell.id,neighbor_face_idx] = -v*face_structs[face_id].area
+            v = v -D_face[face_id]*rhie_chow
+            mass_fluxes[face_id] = v*face_structs[face_id].area
+            
             
             
         @wp.kernel
@@ -147,18 +142,19 @@ class Mesh_Ops(Ops):
                 face_values[face_id,output] = distance*face_gradients[face_id,output] + cell_values[owner_cell.id,output]
                 # wp.printf('%d %f %f %f %f \n',output,face_values[face_id,output],face_gradients[face_id,output],distance,cell_values[owner_cell.id,output])
         @wp.kernel
-        def _calculate_mass_flux_kernel(mass_fluxes:wp.array2d(dtype=self.float_dtype),face_values:wp.array2d(dtype=self.float_dtype),cell_structs:wp.array(dtype = self.cell_struct),
+        def _calculate_mass_flux_kernel(mass_fluxes:wp.array(dtype=self.float_dtype),face_values:wp.array2d(dtype=self.float_dtype),cell_structs:wp.array(dtype = self.cell_struct),
                                   face_structs:wp.array(dtype = self.face_struct),
         ):
-            
-            i,j = wp.tid() # C,F 
-            face_id = cell_structs[i].faces[j]
-            normal = cell_structs[i].face_normal[j]
+            face_id = wp.tid()
+            face = face_structs[face_id]
+            # i,j = wp.tid() # C,F
+            owner_cell = cell_structs[face.adjacent_cells[0]] 
+            normal = owner_cell.face_normal[face.cell_face_index[0]]
             area = face_structs[face_id].area
             #Compute dot product
             v = wp.vector(face_values[face_id,0],face_values[face_id,1],face_values[face_id,2])
 
-            mass_fluxes[i,j] = wp.dot(v,normal)*area
+            mass_fluxes[face_id] = wp.dot(v,normal)*area
             
         @wp.kernel
         def _calculate_gradients_kernel(face_values:wp.array2d(dtype=self.float_dtype),
@@ -182,20 +178,14 @@ class Mesh_Ops(Ops):
             wp.atomic_add(cell_gradients,i,output,vec)
 
         @wp.kernel
-        def _calculate_divergence_kernel(mass_fluxes:wp.array2d(dtype=self.float_dtype),cell_structs:wp.array(dtype=self.cell_struct),div_u:wp.array(dtype=self.float_dtype),volume:wp.bool):
+        def _calculate_divergence_kernel(mass_fluxes:wp.array(dtype=self.float_dtype),cell_structs:wp.array(dtype=self.cell_struct),div_u:wp.array(dtype=self.float_dtype)):
             i,j = wp.tid() # C,F
             # calculate divergence
-            if volume:
-                wp.atomic_add(div_u,i,mass_fluxes[i,j]/cell_structs[i].volume)
-            else:
-                wp.atomic_add(div_u,i,mass_fluxes[i,j])
-
-        @wp.kernel
-        def _massflux_to_array_kernel(cell_structs:wp.array(dtype=self.cell_struct),out:wp.array2d(dtype = self.float_dtype)):
-            i,j = wp.tid()
-            out[i,j] = cell_structs[i].mass_fluxes[j]
-
-        
+            face_id = cell_structs[i].faces[j]
+            if cell_structs[i].face_sides[j] == 0: # Means cell is the Owner side of face
+                wp.atomic_add(div_u,i,mass_fluxes[face_id])
+            else: # means is neighbor side of face so set to -ve
+                wp.atomic_add(div_u,i,-mass_fluxes[face_id])
 
         self._apply_BC = _apply_BC_kernel
         self._apply_cell_value = _apply_cell_value_kernel
@@ -207,10 +197,6 @@ class Mesh_Ops(Ops):
         self._calculate_gradients = _calculate_gradients_kernel
         self._rhie_chow_correction = _rhie_chow_correction_kernel
         self._calculate_divergence = _calculate_divergence_kernel # mesh_ops
-
-        self._massflux_to_array = _massflux_to_array_kernel
-        # self._fill_x_array_from_struct=fill_x_array_from_struct_kernel
-        # self._fill_struct_from_x_array = fill_struct_from_x_array_kernel
 
     def apply_BC(self,face_values,face_gradients,faces): 
         wp.launch(kernel=self._apply_BC,dim = (self.face_properties.boundary_face_ids.shape[0],self.num_outputs),inputs =[face_values,face_gradients,faces,self.face_properties.boundary_value,self.face_properties.gradient_value,self.face_properties.boundary_face_ids])
@@ -261,33 +247,17 @@ class Mesh_Ops(Ops):
             output_indices = wp.array([i for i in range(self.num_outputs)])
         wp.launch(kernel = self._internal_calculate_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [mass_fluxes,cell_values,face_values,faces,cells,self.face_properties.internal_face_ids,output_indices,interpolation_method])
     def calculate_mass_flux(self,mass_fluxes,face_values,cells,faces):
-        wp.launch(kernel = self._calculate_mass_flux,dim = (cells.shape[0],self.faces_per_cell),inputs = [mass_fluxes,face_values,cells,
-                                                                              faces,
-                                                                              ])
+        wp.launch(kernel = self._calculate_mass_flux,dim = (mass_fluxes.shape[0]),inputs = [mass_fluxes,face_values,cells,faces,])
     
-    def calculate_gradients(self,face_values,cell_gradients:wp.array,cells,faces,nodes,output_indices):
-        
+    def calculate_gradients(self,face_values,cell_gradients:wp.array,cells,faces,nodes,output_indices):        
         wp.launch(kernel=self._calculate_gradients,dim = (cells.shape[0],self.faces_per_cell,len(output_indices)),inputs = [face_values,cell_gradients,cells,faces,nodes,output_indices])
 
-    # def gradient_to_cell_struct(self,cell_gradients:wp.array,cells):
-    #     wp.launch(self._gradient_to_cell_struct, dim = cells.shape[0],inputs=[cell_gradients,cells])
 
-    def calculate_divergence(self,mass_fluxes,arr:wp.array | None,cells :wp.array,volume:bool=False):
+    def calculate_divergence(self,mass_fluxes,cells :wp.array,arr:wp.array | None = None):
         if arr is None:
             arr = wp.zeros(shape = self.num_cells,dtype=self.float_dtype)
         arr.zero_()
-        wp.launch(kernel=self._calculate_divergence, dim = (self.num_cells,self.faces_per_cell),inputs = [mass_fluxes,cells,arr,volume])
+        wp.launch(kernel=self._calculate_divergence, dim = (self.num_cells,self.faces_per_cell),inputs = [mass_fluxes,cells,arr])
 
         return arr
     
-    def massflux_to_array(self,arr:wp.array,cells):
-        assert len(arr.shape) == 2 and arr.shape[0] == cells.shape[0] and arr.shape[1] == self.faces_per_cell
-        wp.launch(kernel=self._massflux_to_array,dim = [cells.shape[0],self.faces_per_cell],inputs = [cells,arr])
-
-    # def fill_x_array_from_struct(self,x:wp.array,cells,output_indices):
-    #     assert x.shape[0] == cells.shape[0]*output_indices.shape[0]
-    #     wp.launch(kernel=self._fill_x_array_from_struct,dim = [cells.shape[0],output_indices.shape[0]],inputs = [x,cells,output_indices])
-    
-    # def fill_struct_from_x_array(self,x:wp.array,cells,output_indices):
-    #     assert x.shape[0] == cells.shape[0]*output_indices.shape[0]
-    #     wp.launch(kernel=self._fill_struct_from_x_array,dim = [cells.shape[0],output_indices.shape[0]],inputs = [x,cells,output_indices])

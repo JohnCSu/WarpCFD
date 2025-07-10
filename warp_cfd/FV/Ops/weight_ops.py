@@ -13,7 +13,7 @@ class Weights_Ops(Ops):
         - Calculate Convection And Laplacian Weights
         '''
         @wp.kernel
-        def _calculate_convection_weights_kernel(mass_fluxes:wp.array2d(dtype = self.float_dtype),face_values:wp.array2d(dtype = self.float_dtype),
+        def _calculate_convection_weights_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),face_values:wp.array2d(dtype = self.float_dtype),
                                                  cell_structs:wp.array(dtype = self.cell_struct),
                                 face_structs:wp.array(dtype = self.face_struct),
                                 weights:wp.array(ndim=3,dtype=self.weight_struct),
@@ -27,21 +27,30 @@ class Weights_Ops(Ops):
             
             if face_structs[face_id].is_boundary == 1:
                 weights[i,j,output].owner = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-                weights[i,j,output].neighbor = mass_fluxes[i,j]*face_values[face_id,output]
+                weights[i,j,output].neighbor = mass_fluxes[face_id]*face_values[face_id,output]
             else:
                 owner_face_id = cell_structs[i].face_sides[j] # Returns if current cell i is on the 0 side of face or 1 side of face
                 adj_face_id = wp.static(self.int_dtype(1)) - owner_face_id # Apply not operation to get the other index (can only be 1 or 0)
                 
                 if interpolation == 0: # Central Differencing
-                    weights[i,j,output].owner = face_structs[face_id].norm_distance[owner_face_id]*mass_fluxes[i,j]
-                    weights[i,j,output].neighbor = face_structs[face_id].norm_distance[adj_face_id]*mass_fluxes[i,j]
+                    weights[i,j,output].owner = face_structs[face_id].norm_distance[owner_face_id]*mass_fluxes[face_id]
+                    weights[i,j,output].neighbor = face_structs[face_id].norm_distance[adj_face_id]*mass_fluxes[face_id]
                 elif interpolation == 1: # Upwind
-                    if mass_fluxes[i,j] > 0:
-                        weights[i,j,output].owner = mass_fluxes[i,j]
+
+                    if cell_structs[i].face_sides[j] == 0: #Owner
+                        mass_flux = mass_fluxes[face_id]
+
+                    else:
+                        mass_flux = -mass_fluxes[face_id]
+
+                
+                    if mass_flux > 0:
+                        weights[i,j,output].owner = mass_flux
                         weights[i,j,output].neighbor = 0.
                     else:
                         weights[i,j,output].owner = 0.
-                        weights[i,j,output].neighbor = mass_fluxes[i,j]
+                        weights[i,j,output].neighbor = mass_flux
+                    
         @wp.kernel
         def _interpolate_viscosity_to_face_kernel(cell_viscosity:wp.array(dtype=self.float_dtype),face_viscosity:wp.array(dtype=self.float_dtype),face_structs:wp.array(dtype=self.face_struct)):
             face_id = wp.tid()
