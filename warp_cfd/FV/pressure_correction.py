@@ -67,16 +67,15 @@ class pressure_correction_step():
         self.div_u.zero_()
 
 
-    def solve(self,intermediate_vel,corrected_vel,cell_values,D_face,mass_fluxes,cells,faces):
+    def solve(self,weights,intermediate_vel,corrected_vel,cell_values,D_face,mass_fluxes,cells,faces):
         self.reset()
         vel_indices = self.vel_indices
         p_index = self.p_index
         
         self.mesh_ops.calculate_divergence(mass_fluxes,cells,self.div_u)
         # print(self.div_u.numpy())
-        weights = self.weights
         # D_face2 = wp.ones_like(D_face)
-        self.pressure_correction_ops.calculate_p_correction_weights(D_face,cells,faces,weights)
+        # self.pressure_correction_ops.calculate_p_correction_weights(D_face,cells,faces,weights)
         
        
         self.matrix_ops.calculate_BSR_matrix(self.p_correction_matrix,cells,weights,output_indices=self.p_correction_index,rows = self.p_correction_matrix_rows,flip_sign= False) # only calculate BSR Values

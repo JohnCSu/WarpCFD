@@ -19,7 +19,7 @@ from warp_cfd.FV.Convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
 from warp_cfd.FV.intermediate_velocity import intermediate_velocity_step
 from warp_cfd.FV.pressure_correction import pressure_correction_step
-# wp.config.mode = "debug"
+wp.config.mode = "debug"
 # wp.config.verify_fp = True
 '''
 TODO:

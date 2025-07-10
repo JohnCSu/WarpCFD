@@ -39,8 +39,7 @@ class intermediate_velocity_step():
         Each Cell results in 3 rows. Each Row would have 1 + num neighbors. We can actually calculate this beforehand
         That means each cell gives 3*(1+num_neighbors) of nnz. So total nnz = 3*(1+num_neighbors)*num_cells 
         '''
-        
-        self.vel_matrix = sparse.bsr_from_triplets(*self.sparse_dimensions,
+        self.vel_matrix = sparse.bsr_from_triplets(self.sparse_dimensions[0],self.sparse_dimensions[1],
                                                       rows = self.vel_COO_array.rows,
                                                       columns = self.vel_COO_array.cols,
                                                       values = self.vel_COO_array.values,
@@ -53,9 +52,9 @@ class intermediate_velocity_step():
     def solve(self,initial_vel,intermediate_vel,cell_values,cell_gradients,cells,faces,laplacian_weights,convection_weights,density,vel_indices):
         self.reset()
 
-        # Form Weights the implicit need to change the sign of the laplacian
+        # # Form Weights the implicit need to change the sign of the laplacian
         self.matrix_ops.calculate_BSR_matrix(self.vel_matrix,cells,laplacian_weights,output_indices=vel_indices,rows= self.vel_matrix_rows,flip_sign = True)
-        # The RHS does not need
+        # # The RHS does not need
         self.matrix_ops.calculate_RHS(self.H,faces,laplacian_weights,output_indices= vel_indices,flip_sign=False)
 
         

@@ -5,11 +5,12 @@ from warp_cfd.FV.terms.convection import ConvectionTerm
 from warp_cfd.FV.terms.diffusion import DiffusionTerm
 from warp_cfd.FV.terms.field import Field
 import warp as wp
+wp.config.mode = "debug"
 wp.init()
 if __name__ == '__main__':
     from grid import create_hex_grid
     # wp.clear_kernel_cache()
-    n =51
+    n =2
     w,l = 1.,1.
     G,nu = 1,1/100
     m = create_hex_grid(n,n,1,(w/n,l/n,0.1))
@@ -52,5 +53,39 @@ if __name__ == '__main__':
 
         convection(model)
         diffusion(model,viscosity = nu)
+
+
+        vel_matrix,b,Ap = model.intermediate_velocity_step.solve(model.initial_velocity,
+                                                                   model.intermediate_velocity,
+                                                                   model.cell_values,
+                                                                   model.cell_gradients,
+                                                                   model.cells,model.faces,
+                                                                   diffusion.weights,
+                                                                   convection.weights,
+                                                                   model.density,
+                                                                   model.vel_indices)
+        
+        model.face_interpolation()
+        model.calculate_gradients()
+        model.calculate_mass_flux(True)
+        model.pressure_correction_ops.calculate_D_viscosity(model.D_cell,model.D_face,Ap,model.cells,model.faces)
+        p_correction(model,model.D_face)
+        p,div_u,p_correction,velocity_correction = model.pressure_correction_step.solve(p_correction.weights,
+                                                                                        model.intermediate_velocity,
+                                                                                        model.corrected_velocity,
+                                                                                        model.cell_values,
+                                                                                        model.D_face,
+                                                                                        model.mass_fluxes,
+                                                                                        model.cells,
+                                                                                        model.faces) 
+        wp.copy(model.initial_velocity,model.corrected_velocity)
+
+        
+        model.face_interpolation()
+        model.calculate_gradients()
+        model.calculate_mass_flux(True)
+
+
+        # model.intermediate_velocity_step.solve()
     # exit()
     # print(model.mass_fluxes.numpy())

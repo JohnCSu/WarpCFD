@@ -109,7 +109,7 @@ class Matrix_Ops(Ops):
             else:  # If solving for laplacian explicit terms
                 scale = 1.
             # wp.atomic_add(b,row,weights[cell_id,face_idx,output].neighbor -  weights[cell_id,face_idx,output].neighbor )
-            wp.atomic_add(b,row,scale*weights[cell_id,face_idx,output].neighbor )
+            wp.atomic_add(b,row,scale*weights[cell_id,face_idx,output].explicit_term )
 
         @wp.kernel
         def form_p_grad_vector_kernel(p_grad:wp.array(dtype=self.float_dtype),cell_gradients:wp.array2d(dtype=self.vector_type),
@@ -235,7 +235,7 @@ class Matrix_Ops(Ops):
         if rows is None:
             rows = BSR_matrix.uncompress_rows()
         assert rows.shape[0] == BSR_matrix.values.shape[0]
-        
+        print(output_indices.shape[0])
         wp.launch(kernel=self._calculate_BSR_values,dim = BSR_matrix.values.shape[0],inputs=[rows,
                                                                                              BSR_matrix.columns,
                                                                                              BSR_matrix.values,

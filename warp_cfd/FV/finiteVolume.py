@@ -21,7 +21,7 @@ from warp_cfd.FV.intermediate_velocity import intermediate_velocity_step
 from warp_cfd.FV.pressure_correction import pressure_correction_step
 from warp_cfd.FV.terms.field import Field
 
-wp.config.mode = "debug"
+
 
 # wp.config.verify_fp = True
 '''
@@ -122,11 +122,11 @@ class FVM():
         self.weight_ops.init()
         self.matrix_ops.init()
         self.pressure_correction_ops.init()
-        # self.intermediate_velocity_step = intermediate_velocity_step(self.mesh_ops,self.weight_ops,self.matrix_ops)
-        # self.pressure_correction_step = pressure_correction_step(self.mesh_ops,self.weight_ops,self.matrix_ops,self.pressure_correction_ops)
+        self.intermediate_velocity_step = intermediate_velocity_step(self.mesh_ops,self.weight_ops,self.matrix_ops)
+        self.pressure_correction_step = pressure_correction_step(self.mesh_ops,self.weight_ops,self.matrix_ops,self.pressure_correction_ops)
         
-        # self.intermediate_velocity_step.init(self.cells,self.faces)
-        # self.pressure_correction_step.init(self.cells,self.faces)
+        self.intermediate_velocity_step.init(self.cells,self.faces)
+        self.pressure_correction_step.init(self.cells,self.faces)
 
         self.init_global_arrays()
     
