@@ -105,6 +105,7 @@ class FVM():
         
         self.steps = 0
         self.MAX_STEPS = 2
+        self.NUM_INNER_LOOPS = 1
 
         Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.weight_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
 
@@ -149,13 +150,28 @@ class FVM():
         self.D_cell = wp.zeros(shape = self.num_cells,dtype = self.float_dtype)
         self.mass_fluxes = wp.zeros(shape = (self.num_faces),dtype= self.float_dtype)
     
-    
+
+    def struct_member_to_array(self,member = 'mass_fluxes',struct = 'cells'):
+        if struct == 'cells':
+            struct_ = self.cell_struct
+            arr = self.cells.numpy()
+        elif struct == 'faces':
+            struct_ = self.face_struct
+            arr = self.faces.numpy()
+        else:
+            raise ValueError()
+        keys = list(struct_.vars.keys())
+        index = keys.index(member)
+
+        member_arr = [a[index] for a in arr]
+        return np.array(member_arr)
+
     def face_interpolation(self):
          # Use it to store stuff
         self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
         # self.mesh_ops.apply_cell_value(self.cells)
-        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.output_indices,interpolation_method=0)
-
+        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.p_index,interpolation_method=0)
+        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.vel_indices,interpolation_method=1)
     def calculate_gradients(self):
         self.cell_gradients.zero_()
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
@@ -168,3 +184,42 @@ class FVM():
             self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
        
 
+
+    def check_convergence(self,vel_matrix:sparse.BsrMatrix,velocity:wp.array,b:wp.array,div_u=None,velocity_correction:wp.array=None,p_correction:wp.array=None,log = True):
+        '''
+        Checks the following:
+        divergence residual
+        momentum equations
+        pressure correction residual
+        '''
+        l2_norm =  lambda Ax,b :np.linalg.norm(Ax-b,ord = 2)
+        div_u = self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,div_u)
+        Ax:wp.array = sparse.bsr_mv(vel_matrix,velocity)
+
+        Ax = Ax.numpy().reshape(-1,3)
+        b = b.numpy().reshape(-1,3)
+        
+        
+        local_err = self.Convergence.local_continuity_error(div_u)
+        
+        
+        convergence = {
+            'momentum_x':self.Convergence.check('momentum_x',Ax[:,0],b[:,0]),
+            'momentum_y':self.Convergence.check('momentum_y',Ax[:,1],b[:,1]),
+            'momentum_z':self.Convergence.check('momentum_z',Ax[:,2],b[:,2]),
+            'continuity':self.Convergence.check('continuity',div_u) if div_u is not None else np.nan,
+            'local_continuity':self.Convergence.check('local_continuity',local_err),
+            'velocity_correction':self.Convergence.check('velocity_correction',velocity_correction) if velocity_correction is not None else np.nan,
+            'pressure_correction':self.Convergence.check('pressure_correction',p_correction) if p_correction is not None else np.nan,
+        }
+        
+        
+        # print('Cell ID', np.argmax())
+        print(convergence)
+        if log:
+            self.Convergence.log(convergence)
+            self.res = np.abs(p_correction.numpy())
+        
+        if np.isnan(convergence['momentum_x'][0]):
+            raise ValueError()
+        return self.Convergence.has_converged()

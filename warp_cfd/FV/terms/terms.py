@@ -21,7 +21,7 @@ class Term:
         }
 
         self.num_outputs = len(self.field)
-        self.weights = wp.array(shape=(fv.num_cells,fv.num_faces,self.num_outputs),dtype=fv.weight_struct)
+        self.weights = wp.array(shape=(fv.num_cells,fv.faces_per_cell,self.num_outputs),dtype=fv.weight_struct)
 
         self.global_output_indices = wp.array([f.index for f in self.field],dtype= wp.int32)
         self.float_dtype = fv.float_dtype
@@ -32,4 +32,6 @@ class Term:
 
     def calculate_weights(self,fv:FVM,*args, **kwargs: Any) -> Any:
         pass
+    
+
     

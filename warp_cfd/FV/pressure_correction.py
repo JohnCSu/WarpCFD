@@ -75,7 +75,9 @@ class pressure_correction_step():
         self.mesh_ops.calculate_divergence(mass_fluxes,cells,self.div_u)
         # print(self.div_u.numpy())
         # D_face2 = wp.ones_like(D_face)
-        # self.pressure_correction_ops.calculate_p_correction_weights(D_face,cells,faces,weights)
+        if weights is None:
+            weights = self.weights
+            self.pressure_correction_ops.calculate_p_correction_weights(D_face,cells,faces,weights)
         
        
         self.matrix_ops.calculate_BSR_matrix(self.p_correction_matrix,cells,weights,output_indices=self.p_correction_index,rows = self.p_correction_matrix_rows,flip_sign= False) # only calculate BSR Values

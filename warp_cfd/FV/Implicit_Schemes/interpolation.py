@@ -47,3 +47,39 @@ def upwind(
     weight_vec[2] = 0.
 
     return weight_vec
+
+
+@wp.func
+def upwindLinear( 
+            cell_values:wp.array2d(dtype = float),
+            cell_gradients:wp.array2d(dtype = Any),
+            mass_fluxes:wp.array(dtype = float),
+            owner_cell:Any,
+            neighbor_cell:Any,
+            face:Any,
+            output:int,
+            ):
+    '''
+    Upwind Linear 
+    '''
+
+    # 0 -> Owner, 1 -> Neighbor, 2 -> Explicit RHS term
+    weight_vec = wp.vector(length=3,dtype=float)
+
+    j = face.cell_face_index
+
+    if mass_fluxes[face.id] > 0:
+        weight_vec[0]= 1.
+        weight_vec[1] = 0.
+        upwind_id = owner_cell.id
+        dist_vec = owner_cell.cell_centroid_to_face_centroid[j[0]]
+    else:
+        weight_vec[0]= 0.
+        weight_vec[1]= 1.
+        upwind_id = neighbor_cell.id
+        dist_vec = owner_cell.cell_centroid_to_face_centroid[j[1]]
+
+    weight_vec[2] = wp.dot(cell_gradients[upwind_id,output],dist_vec)
+    
+
+    return weight_vec

@@ -230,18 +230,29 @@ class FVM():
             
 
         # print(self.mass_fluxes.numpy())
-        vel_matrix,b,Ap = self.intermediate_velocity_step.solve(self.initial_velocity,
+        results,vel_matrix,b,Ap = self.intermediate_velocity_step.solve(self.initial_velocity,
                                                                    self.intermediate_velocity,
                                                                    self.cell_values,
                                                                    self.cell_gradients,
-                                                                   self.cells,self.faces,self.laplacian_weights,self.convection_weights,self.density,self.vel_indices)
+                                                                   self.cells,
+                                                                   self.faces,
+                                                                   self.laplacian_weights,self.convection_weights,self.density,self.vel_indices)
+        
+        print(bsr_to_coo_array(vel_matrix).toarray())
+
+        print(self.laplacian_weights.numpy())
+        print(self.convection_weights.numpy())
         # if self.steps % 40 == 0:
         #     self.check_convergence(vel_matrix,self.intermediate_velocity,b,log= False )
         self.face_interpolation()
         self.calculate_gradients()
         self.update_mass_flux(True)
         self.pressure_correction_ops.calculate_D_viscosity(self.D_cell,self.D_face,Ap,self.cells,self.faces)
-        p,div_u,p_correction,velocity_correction = self.pressure_correction_step.solve(self.intermediate_velocity,self.corrected_velocity,self.cell_values,self.D_face,self.mass_fluxes,self.cells,self.faces) 
+        print(self.D_face)
+        
+        p,div_u,p_correction,velocity_correction = self.pressure_correction_step.solve(None,self.intermediate_velocity,self.corrected_velocity,self.cell_values,self.D_face,self.mass_fluxes,self.cells,self.faces) 
+        print(self.pressure_correction_step.weights)
+        
         wp.copy(self.initial_velocity,self.corrected_velocity)
 
         
@@ -286,7 +297,7 @@ def pouiselle_flow(xyz,width,G = 1.,nu = 0.01):
 if __name__ == '__main__':
     from grid import create_hex_grid
     
-    n =51
+    n =2
     w,l = 1.,1.
     G,nu = 1,1/100
     m = create_hex_grid(n,n,1,(w/n,l/n,0.1))
@@ -313,12 +324,13 @@ if __name__ == '__main__':
     
     model = FVM(m,density = 1.,viscosity= nu)
     model.init_step()
-
+    IC = wp.ones(shape = (model.num_cells,3),dtype = wp.float32)
+    model.set_initial_conditions(IC)
     results = m.pyvista_mesh
     
     
     np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
-    model.MAX_STEPS = 801
+    model.MAX_STEPS = 1
     for i in range(model.MAX_STEPS):
         model.step()
     # exit()

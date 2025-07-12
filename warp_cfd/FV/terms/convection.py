@@ -3,7 +3,7 @@ from typing import Any
 from warp_cfd.FV.finiteVolume import FVM
 from warp_cfd.FV.terms.field import Field
 from warp_cfd.FV.terms.terms import Term
-from warp_cfd.FV.Implicit_Schemes.interpolation import central_difference,upwind
+from warp_cfd.FV.Implicit_Schemes.interpolation import central_difference,upwind,upwindLinear
 
 class ConvectionTerm(Term):
     def __init__(self,fv:FVM, field: Field| list[Field],interpolation='upwind',custom_interpolation = None):
@@ -12,7 +12,7 @@ class ConvectionTerm(Term):
         self.interpolation_functions = {
             'upwind': upwind,
             'central difference':central_difference,
-            'upwindLinear':None, 
+            'upwindLinear':upwindLinear, 
             'custom':None # To keep assertion check easy
         }
 

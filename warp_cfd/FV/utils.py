@@ -1,6 +1,7 @@
 import warp as wp
 import numpy as np
-
+import warp.sparse as sparse
+import scipy.sparse as sp_sparse
 class COO_Arrays:
     rows: wp.array
     cols: wp.array
@@ -23,3 +24,7 @@ class COO_Arrays:
         self.rows = wp.zeros(nnz,dtype=int_dtype)
         self.cols = wp.zeros(nnz,dtype=int_dtype)
         self.values = wp.zeros(nnz,dtype=float_dtype)
+
+
+def bsr_to_coo_array(bsr:sparse.BsrMatrix):
+    return sp_sparse.coo_array((bsr.values.numpy(),(bsr.uncompress_rows().numpy(),bsr.columns.numpy())),shape = (bsr.nrow,bsr.ncol))

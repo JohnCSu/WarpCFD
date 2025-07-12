@@ -235,7 +235,7 @@ class Matrix_Ops(Ops):
         if rows is None:
             rows = BSR_matrix.uncompress_rows()
         assert rows.shape[0] == BSR_matrix.values.shape[0]
-        print(output_indices.shape[0])
+        # print(output_indices.shape[0])
         wp.launch(kernel=self._calculate_BSR_values,dim = BSR_matrix.values.shape[0],inputs=[rows,
                                                                                              BSR_matrix.columns,
                                                                                              BSR_matrix.values,

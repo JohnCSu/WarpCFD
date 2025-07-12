@@ -223,7 +223,7 @@ class Mesh():
             faces.cell_face_index[face_id,0] = cell_face_idx
 
         # get ids for boundary and internal faces
-        face_ids = np.arange(K)
+        face_ids = np.arange(K,dtype=faces.int_dtype)
         faces.boundary_face_ids = face_ids[faces.is_boundary == 1]
         faces.internal_face_ids = face_ids[faces.is_boundary == 0]
 
@@ -476,7 +476,7 @@ class faces_data():
         assert isinstance(face_ids,(int,list,tuple,np.ndarray))
         
         if not isinstance(face_ids,(list,tuple,np.ndarray)):
-            face_ids = np.array([face_ids])
+            face_ids = np.array([face_ids],self.int_dtype)
 
         assert np.all(self.is_boundary[face_ids]), 'One of the provided face id is not an external face valid for applying boundary conditions'
         ''' we either have a float for all in face_ids or an array of same len'''

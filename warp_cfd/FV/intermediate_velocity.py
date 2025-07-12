@@ -75,11 +75,11 @@ class intermediate_velocity_step():
         
         wp.copy(intermediate_vel,initial_vel)
         result = self.matrix_ops.solve_Axb(A = self.vel_matrix,x = intermediate_vel,b = self.b)
-        # print(result)
+        
         
         self.matrix_ops.fill_outputs_from_matrix_vector(cell_values,intermediate_vel,vel_indices)
 
-        return self.vel_matrix,self.b,self.Ap
+        return result,self.vel_matrix,self.b,self.Ap
     
 
     def reset(self):
