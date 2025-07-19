@@ -4,21 +4,17 @@ import numpy as np
 from pyvista import CellType
 from warp.types import vector
 from warp import sparse
-from warp.optim import linear
-from typing import Any
 
-import scipy.sparse as sp_sparse
 from warp_cfd.FV.Ops.array_ops import add_1D_array,sub_1D_array,inv_1D_array,to_vector_array,mult_scalar_1D_array,absolute_1D_array,power_scalar_1D_array,sum_1D_array,L_norm_1D_array
 
-from matplotlib import pyplot as plt
 from warp_cfd.preprocess import Mesh
-import warp_cfd.FV.Cells as Cells
+import warp_cfd.FV.cells as Cells
 from warp_cfd.FV.Weights import create_weight_struct
 from warp_cfd.FV.Ops import Mesh_Ops,Weights_Ops,Matrix_Ops,Pressure_correction_Ops 
-from warp_cfd.FV.Convergence import Convergence
+from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
-from warp_cfd.FV.intermediate_velocity import intermediate_velocity_step
-from warp_cfd.FV.pressure_correction import pressure_correction_step
+from warp_cfd.FV.deprecated.intermediate_velocity import intermediate_velocity_step
+from warp_cfd.FV.deprecated.pressure_correction import pressure_correction_step
 from warp_cfd.FV.terms.field import Field
 
 
@@ -59,7 +55,7 @@ class FVM():
     '''
     Base Class that takes in class Mesh and creates the appropriate object to form terms
     '''
-    def __init__(self,mesh:Mesh,density:float = 1000,viscosity:float = 1e-3,dtype = wp.float32,int_dtype = wp.int32):
+    def __init__(self,mesh:Mesh,output_variables = None,density:float = 1000,viscosity:float = 1e-3,dtype = wp.float32,int_dtype = wp.int32):
         self.density = density
         self.viscosity = viscosity
         self.gridType:str = mesh.gridType
@@ -73,10 +69,15 @@ class FVM():
 
         self.face_properties = mesh.face_properties.to_NVD_warp()
         self.cell_properties = mesh.cell_properties.to_NVD_warp()
-        self.node_properties = to_vector_array(mesh.nodes)        
+        self.node_properties = to_vector_array(mesh.nodes) 
         # Output for each cell: T,C,4 (u,v,w,p)
         self.input_variables = ['x','y','z','t']
-        self.output_variables = ['u','v','w','p']
+        
+        if output_variables is None:
+            self.output_variables = ['u','v','w','p']
+        else:
+            self.output_variables = output_variables
+
         self.fields = [Field(output,i) for i,output in enumerate(self.output_variables)]
         self.vars_mapping = {var:i for i,var in enumerate(self.output_variables)}
         self.output_indices = wp.array(np.arange(len(self.output_variables)),dtype=self.int_dtype)
@@ -103,9 +104,8 @@ class FVM():
 
         self.face_viscosity = None
         
-        self.steps = 0
-        self.MAX_STEPS = 2
-        self.NUM_INNER_LOOPS = 1
+        # self.steps = 0
+        
 
         Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.weight_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
 
@@ -184,7 +184,12 @@ class FVM():
             self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
        
 
-
+    def calculate_divergence(self,arr = None):
+        if arr is None:
+            arr = wp.zeros(shape = self.cells.shape[0],dtype= self.float_dtype)
+        arr.zero_()
+        self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,arr)
+        return arr
     def check_convergence(self,vel_matrix:sparse.BsrMatrix,velocity:wp.array,b:wp.array,div_u=None,velocity_correction:wp.array=None,p_correction:wp.array=None,log = True):
         '''
         Checks the following:
@@ -223,3 +228,57 @@ class FVM():
         if np.isnan(convergence['momentum_x'][0]):
             raise ValueError()
         return self.Convergence.has_converged()
+    
+
+    def replace_cell_values(self,field_idx:int,value:float | wp.array):
+        '''
+        Completely Override the values stored in the cell values array. To add to the cell values, see `update_cell_values()` method instead
+        '''
+        if isinstance(field_idx,(list,tuple,wp.array)):
+            field_idx = wp.array(field_idx,dtype=wp.int32) 
+        self.matrix_ops.fill_outputs_from_matrix_vector(self.cell_values,value,field_idx)
+
+
+    def update_cell_values(self,field_idx:int,value:float | wp.array,scale : float = 1.):
+        '''
+        add the value to the cell values array. To completely replace the cell values, see `replace_cell_values()` method instead
+        '''
+        if isinstance(field_idx,(list,tuple,wp.array)):
+            field_idx = wp.array(field_idx,dtype=wp.int32) 
+            if isinstance(value,float):
+                v = wp.empty(shape=(1,1),dtype= self.float_dtype)
+                v.fill_(value)
+                value = v
+                # value = wp.array([value],dtype= self.float_dtype)
+
+            wp.launch(kernel=update_cell_values_multi,dim = self.num_cells, inputs = [field_idx,scale,value,self.cell_values])
+
+        else:
+            if isinstance(value,float):
+                value = wp.array([value],dtype= self.float_dtype)    
+            wp.launch(kernel=update_cell_values,dim = self.num_cells, inputs = [field_idx,scale,value,self.cell_values])
+
+
+@wp.kernel
+def update_cell_values(field_idx:int,scale:float,field_value:wp.array(dtype=float),cell_values:wp.array2d(dtype = float)):
+    i = wp.tid() # C
+    
+    if field_value.shape[0] == 1:
+        value = field_value[0]
+    else:
+        value = field_value[i]
+
+    wp.atomic_add(cell_values,i,field_idx,scale*value)
+
+
+
+@wp.kernel
+def update_cell_values_multi(output_idx:wp.array(dtype=int),scale:float,field_value:wp.array2d(dtype=float),cell_values:wp.array2d(dtype = float)):
+    i,o = wp.tid() # C,O
+    
+    if field_value.shape[0] == 1:
+        value = field_value[0,0]
+    else:
+        value = field_value[i,o]
+
+    wp.atomic_add(cell_values,i,output_idx[o],scale*value)

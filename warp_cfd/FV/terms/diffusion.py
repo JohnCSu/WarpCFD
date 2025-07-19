@@ -1,14 +1,13 @@
 import warp as wp
 from typing import Any
-from warp_cfd.FV.finiteVolume import FVM
+from warp_cfd.FV.model import FVM
 from warp_cfd.FV.terms.field import Field
 from warp_cfd.FV.Implicit_Schemes.gradient_interpolation import central_difference
 from warp_cfd.FV.terms.terms import Term
 
 class DiffusionTerm(Term):
-    def __init__(self,fv:FVM, field: Field| list[Field],*,interpolation='central difference',custom_interpolation = None,von_neumann = None, dirchlet =None):
-        super().__init__(fv,field)
-        self.implicit = True
+    def __init__(self,fv:FVM, fields: Field| list[Field],*,interpolation='central difference',custom_interpolation = None,von_neumann = None, dirchlet =None,need_global_index= True):
+        super().__init__(fv,fields,implicit= True,need_global_index = need_global_index)
         #Define interpolation function
         self.interpolation = interpolation
         if interpolation == 'central difference':
@@ -19,7 +18,7 @@ class DiffusionTerm(Term):
             self.interpolation_function  = custom_interpolation
 
         # Implicit Diffusion Kernel
-        self._calculate_internal_diffusion_weights_kernel = create_diffusion_scheme(self.interpolation_function,fv.cell_struct,fv.weight_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+        self._calculate_internal_diffusion_weights_kernel = create_diffusion_scheme(self.interpolation_function,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
 
         # Define the BC kernel
         assert not ((von_neumann is not None) and (dirchlet is not None)), 'von neumann and dirichlet settings cannot both be not None'
@@ -27,15 +26,14 @@ class DiffusionTerm(Term):
         
         
         if von_neumann is not None:
-            assert len(self.field) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'
+            assert len(self.fields) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'
             
-            
-            self._calculate_boundary_diffusion_weights_kernel = create_von_neumann_BC_diffusion_kernel(von_neumann,fv.cell_struct,fv.weight_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+            self._calculate_boundary_diffusion_weights_kernel = create_von_neumann_BC_diffusion_kernel(von_neumann,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
         elif dirchlet is not None:
-            assert len(self.field) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'
-            self._calculate_boundary_diffusion_weights_kernel = create_von_neumann_BC_diffusion_kernel(dirchlet,fv.cell_struct,fv.weight_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+            assert len(self.fields) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'
+            self._calculate_boundary_diffusion_weights_kernel = create_von_neumann_BC_diffusion_kernel(dirchlet,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
         else:
-            self._calculate_boundary_diffusion_weights_kernel = creating_diffusion_BC_scheme_kernel(fv.cell_struct,fv.weight_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+            self._calculate_boundary_diffusion_weights_kernel = creating_diffusion_BC_scheme_kernel(fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
 
     
     def calculate_weights(self,fv:FVM,viscosity:float | wp.array,**kwargs):
@@ -50,7 +48,7 @@ class DiffusionTerm(Term):
 
 
 
-def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,weight_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.kernel
     def von_neumann_BC_diffusion_kernel(boundary_ids:wp.array(dtype=int),
                                         viscosity:wp.array(dtype=float_dtype),
@@ -58,7 +56,7 @@ def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,weight_
                                         boudary_gradients:wp.array2d(dtype = float_dtype),
                                         cell_structs:wp.array(dtype = cell_struct),
                                         face_structs:wp.array(dtype = face_struct),
-                                        weights:wp.array(ndim=3,dtype=weight_struct),
+                                        weights:wp.array(ndim=4,dtype=float_dtype),
                                         output_indices:wp.array(dtype=int_dtype)):
         i,_ = wp.tid()
         face_id = boundary_ids[i]
@@ -71,13 +69,13 @@ def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,weight_
         else:
             nu = viscosity[face_id]
         
-        weights[owner_cell_id,face_idx,0].owner = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-        weights[owner_cell_id,face_idx,0].neighbor = 0.
-        weights[owner_cell_id,face_idx,0].explicit_term = nu*von_neumann_value*face.area    
+        weights[owner_cell_id,face_idx,0,0] = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+        weights[owner_cell_id,face_idx,0,1] = 0.
+        weights[owner_cell_id,face_idx,0,2] = nu*von_neumann_value*face.area    
 
     return von_neumann_BC_diffusion_kernel
 
-def create_dirichlet_BC_kernel(dirichlet_value,cell_struct,weight_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+def create_dirichlet_BC_kernel(dirichlet_value,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.kernel
     def dirichlet_BC_kernel_BC_diffusion_kernel(boundary_ids:wp.array(dtype=int),
                                         viscosity:wp.array(dtype=float_dtype),
@@ -85,7 +83,7 @@ def create_dirichlet_BC_kernel(dirichlet_value,cell_struct,weight_struct,face_st
                                         boudary_gradients:wp.array2d(dtype = float_dtype),        
                                         cell_structs:wp.array(dtype = cell_struct),
                                         face_structs:wp.array(dtype = face_struct),
-                                        weights:wp.array(ndim=3,dtype=weight_struct),
+                                        weights:wp.array(ndim=4,dtype=float_dtype),
                                         output_indices:wp.array(dtype=int_dtype)):
         i,_ = wp.tid()
         face_id = boundary_ids[i]
@@ -100,14 +98,14 @@ def create_dirichlet_BC_kernel(dirichlet_value,cell_struct,weight_struct,face_st
         cell_centroid_to_face_centroid_magnitude = wp.length(cell_structs[owner_cell_id].cell_centroid_to_face_centroid[face_idx])
         weight = nu*(face.area)/cell_centroid_to_face_centroid_magnitude
         
-        weights[owner_cell_id,face_idx,0].owner = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-        weights[owner_cell_id,face_idx,0].neighbor = 0.
-        weights[owner_cell_id,face_idx,0].explicit_term = weight*dirichlet_value
+        weights[owner_cell_id,face_idx,0,0] = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+        weights[owner_cell_id,face_idx,0,1] = 0.
+        weights[owner_cell_id,face_idx,0,2] = weight*dirichlet_value
     
     return dirichlet_BC_kernel_BC_diffusion_kernel
 
 
-def creating_diffusion_BC_scheme_kernel(cell_struct,weight_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+def creating_diffusion_BC_scheme_kernel(cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
     
     @wp.kernel
     def diffusion_BC_kernel(boundary_ids:wp.array(dtype=int),
@@ -116,7 +114,7 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,weight_struct,face_struct,fl
                             boudary_gradients:wp.array2d(dtype = float_dtype),
                             cell_structs:wp.array(dtype = cell_struct),
                             face_structs:wp.array(dtype = face_struct),
-                            weights:wp.array(ndim=3,dtype=weight_struct),
+                            weights:wp.array(ndim=4,dtype=float_dtype),
                             output_indices:wp.array(dtype=int_dtype),):
         
         i,output = wp.tid()
@@ -134,21 +132,21 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,weight_struct,face_struct,fl
         face_idx = face.cell_face_index[0]
 
         if face.gradient_is_fixed[global_var_idx]:
-            weights[owner_cell_id,face_idx,output].owner = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-            weights[owner_cell_id,face_idx,output].neighbor = 0.
-            weights[owner_cell_id,face_idx,output].explicit_term = nu*boudary_gradients[face_id,global_var_idx]*face.area    
+            weights[owner_cell_id,face_idx,output,0] = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+            weights[owner_cell_id,face_idx,output,1] = 0.
+            weights[owner_cell_id,face_idx,output,2] = nu*boudary_gradients[face_id,global_var_idx]*face.area    
         else:
             cell_centroid_to_face_centroid_magnitude = wp.length(cell_structs[owner_cell_id].cell_centroid_to_face_centroid[face_idx])
             weight = nu*(face.area)/cell_centroid_to_face_centroid_magnitude
             
-            weights[owner_cell_id,face_idx,output].owner = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-            weights[owner_cell_id,face_idx,output].neighbor = 0.
-            weights[owner_cell_id,face_idx,output].explicit_term = weight*boundary_values[face_id,global_var_idx]
+            weights[owner_cell_id,face_idx,output,0] = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+            weights[owner_cell_id,face_idx,output,1] = 0.
+            weights[owner_cell_id,face_idx,output,2] = weight*boundary_values[face_id,global_var_idx]
 
     return diffusion_BC_kernel
 
 
-def create_diffusion_scheme(interpolation_function,cell_struct,weight_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+def create_diffusion_scheme(interpolation_function,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.kernel
     def diffusion_weights_kernel(internal_face_ids:wp.array(dtype= int),
                                  viscosity:wp.array(dtype=float_dtype),
@@ -157,7 +155,7 @@ def create_diffusion_scheme(interpolation_function,cell_struct,weight_struct,fac
                                 mass_fluxes:wp.array(dtype=float),
                                 cell_structs:wp.array(dtype = cell_struct),
                                 face_structs:wp.array(dtype = face_struct),
-                                weights:wp.array(ndim=3,dtype=weight_struct),
+                                weights:wp.array(ndim=4,dtype=float_dtype),
                                 output_indices:wp.array(dtype=int_dtype),
                             ):
         
@@ -183,13 +181,13 @@ def create_diffusion_scheme(interpolation_function,cell_struct,weight_struct,fac
         field_weighting = wp.static(interpolation_function)(cell_values,cell_gradients,mass_fluxes,owner_cell,neighbor_cell,face,global_var_idx)
 
         #Owner, Neighbor , Explicit
-        weights[owner_cell_id,face_indices[0],output].owner = field_weighting[0]*weight
-        weights[owner_cell_id,face_indices[0],output].neighbor = field_weighting[1]*weight
-        weights[owner_cell_id,face_indices[0],output].explicit_term = field_weighting[2]*weight
+        weights[owner_cell_id,face_indices[0],output,0] = field_weighting[0]*weight
+        weights[owner_cell_id,face_indices[0],output,1] = field_weighting[1]*weight
+        weights[owner_cell_id,face_indices[0],output,2] = field_weighting[2]*weight
 
         # For neighbor we need to flip the mass flux first and then flip the weightings
-        weights[neighbor_cell_id,face_indices[1],output].owner = -field_weighting[1]*weight
-        weights[neighbor_cell_id,face_indices[1],output].neighbor = -field_weighting[0]*weight
-        weights[neighbor_cell_id,face_indices[1],output].explicit_term = -field_weighting[2]*weight
+        weights[neighbor_cell_id,face_indices[1],output,0] = -field_weighting[1]*weight
+        weights[neighbor_cell_id,face_indices[1],output,1] = -field_weighting[0]*weight
+        weights[neighbor_cell_id,face_indices[1],output,2] = -field_weighting[2]*weight
     return diffusion_weights_kernel
 

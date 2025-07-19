@@ -1,7 +1,9 @@
 import warp as wp
 import numpy as np
 from typing import Any
-
+'''
+Primitive Operations for arrays with numerical types e.g. add, mult, div
+'''
 
 
 @wp.kernel
@@ -61,9 +63,6 @@ def absolute_1D_array_kernel(a:wp.array(dtype = Any),c:wp.array(dtype = Any)):
 def naive_sum_1D_array_kernel(a:wp.array(dtype = Any),c:wp.array(dtype = Any)):
     i = wp.tid()
     wp.atomic_add(c,0,a[i])
-
-
-
 
 def add_1D_array(a:wp.array,b:wp.array,c:wp.array):
     '''add a and b element wise into array c i.e. `c[i] = a[i] + b[i]`'''

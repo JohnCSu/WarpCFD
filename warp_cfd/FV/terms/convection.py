@@ -1,13 +1,13 @@
 import warp as wp
 from typing import Any
-from warp_cfd.FV.finiteVolume import FVM
+from warp_cfd.FV.model import FVM
 from warp_cfd.FV.terms.field import Field
 from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.Implicit_Schemes.interpolation import central_difference,upwind,upwindLinear
 
 class ConvectionTerm(Term):
     def __init__(self,fv:FVM, field: Field| list[Field],interpolation='upwind',custom_interpolation = None):
-        super().__init__(fv,field)
+        super().__init__(fv,field,True,True)
 
         self.interpolation_functions = {
             'upwind': upwind,
@@ -24,7 +24,7 @@ class ConvectionTerm(Term):
             self.interpolation_functions['custom'] = custom_interpolation
             
         self.interpolation_function = self.interpolation_functions[interpolation]
-        self._calculate_convection_weights_kernel = create_convection_scheme(self.interpolation_function,fv.cell_struct,fv.weight_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+        self._calculate_convection_weights_kernel = create_convection_scheme(self.interpolation_function,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
 
 
 
@@ -40,7 +40,7 @@ class ConvectionTerm(Term):
 
 
 
-def create_convection_scheme(interpolation_function,cell_struct,weight_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+def create_convection_scheme(interpolation_function,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.kernel
     def convection_weights_kernel(cell_values:wp.array2d(dtype = float_dtype),
                                                 cell_gradients:wp.array2d(dtype = Any),
@@ -48,7 +48,7 @@ def create_convection_scheme(interpolation_function,cell_struct,weight_struct,fa
                                                 mass_fluxes:wp.array(dtype=float),
                                                 cell_structs:wp.array(dtype = cell_struct),
                             face_structs:wp.array(dtype = face_struct),
-                            weights:wp.array(ndim=3,dtype=weight_struct),
+                            weights:wp.array(ndim=4,dtype=float_dtype),
                             output_indices:wp.array(dtype=int_dtype)):
         '''
         To DO:
@@ -62,9 +62,9 @@ def create_convection_scheme(interpolation_function,cell_struct,weight_struct,fa
         neighbor_cell_id = face.adjacent_cells[1]
         if face.is_boundary == 1:
             face_idx = face.cell_face_index[0]
-            weights[owner_cell_id,face_idx,output].owner = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-            weights[owner_cell_id,face_idx,output].neighbor = 0.
-            weights[owner_cell_id,face_idx,output].explicit_term = mass_fluxes[face_id]*face_values[face_id,global_var_idx]
+            weights[owner_cell_id,face_idx,output,0] = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+            weights[owner_cell_id,face_idx,output,1] = 0.
+            weights[owner_cell_id,face_idx,output,2]= mass_fluxes[face_id]*face_values[face_id,global_var_idx]
 
         else: # internal Faces
 
@@ -75,13 +75,13 @@ def create_convection_scheme(interpolation_function,cell_struct,weight_struct,fa
             field_weighting = wp.static(interpolation_function)(cell_values,cell_gradients,mass_fluxes,owner_cell,neighbor_cell,face,global_var_idx)
 
             # #Owner, Neighbor , Explicit
-            weights[owner_cell_id,face_indices[0],output].owner = field_weighting[0]*mass_fluxes[face_id]
-            weights[owner_cell_id,face_indices[0],output].neighbor = field_weighting[1]*mass_fluxes[face_id]
-            weights[owner_cell_id,face_indices[0],output].explicit_term = field_weighting[2]*mass_fluxes[face_id]
+            weights[owner_cell_id,face_indices[0],output,0] = field_weighting[0]*mass_fluxes[face_id]
+            weights[owner_cell_id,face_indices[0],output,1] = field_weighting[1]*mass_fluxes[face_id]
+            weights[owner_cell_id,face_indices[0],output,2] = field_weighting[2]*mass_fluxes[face_id]
 
             # # For neighbor we need to flip the mass flux first and then flip the weightings
             mass_flux = -mass_fluxes[face_id]
-            weights[neighbor_cell_id,face_indices[1],output].owner = field_weighting[1]*mass_flux
-            weights[neighbor_cell_id,face_indices[1],output].neighbor = field_weighting[0]*mass_flux
-            weights[neighbor_cell_id,face_indices[1],output].explicit_term = field_weighting[2]*mass_flux
+            weights[neighbor_cell_id,face_indices[1],output,0] = field_weighting[1]*mass_flux
+            weights[neighbor_cell_id,face_indices[1],output,1] = field_weighting[0]*mass_flux
+            weights[neighbor_cell_id,face_indices[1],output,2]= field_weighting[2]*mass_flux
     return convection_weights_kernel

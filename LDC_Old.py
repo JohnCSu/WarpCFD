@@ -17,8 +17,8 @@ from warp_cfd.FV.Weights import create_weight_struct
 from warp_cfd.FV.Ops import Mesh_Ops,Weights_Ops,Matrix_Ops,Pressure_correction_Ops 
 from warp_cfd.FV.Convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
-from warp_cfd.FV.intermediate_velocity import intermediate_velocity_step
-from warp_cfd.FV.pressure_correction import pressure_correction_step
+from warp_cfd.FV.deprecated.intermediate_velocity import intermediate_velocity_step
+from warp_cfd.FV.deprecated.pressure_correction import pressure_correction_step
 wp.config.mode = "debug"
 # wp.config.verify_fp = True
 '''
