@@ -103,7 +103,8 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
             gmsh.fltk.run()
     
     nodes = gmsh.model.mesh.getNodes()[1].reshape(-1,3) # Get Array of N,3 points
-    elements = gmsh.model.mesh.getElementsByType(element_id[element_type])[1].reshape(-1,num_nodes_per_cell[element_type])  # Get an array of (numcells, nodes per cell)
+    elements = gmsh.model.mesh.getElementsByType(element_id[element_type])[1].reshape(-1,num_nodes_per_cell[element_type]) -1  # Get an array of (numcells, nodes per cell)
+    gmsh.clear()
     gmsh.finalize()
 
 
