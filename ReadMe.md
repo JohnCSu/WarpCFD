@@ -14,8 +14,10 @@ Steady State Lid Driven Cavity (Re=100):
 # RoadMap (In hopeful order)
 - Implement SIMPLE loop
 - Add Pressure inlet/outlet
+- Add And Test Tetra Elements
+- Add And Test Wedge Elements
 - Implement Skewness corrections
-- Add Wedge Elements
+
 
 - Add unsteady flow
     - Pseudo Transient

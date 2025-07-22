@@ -1,0 +1,114 @@
+import gmsh
+import sys
+
+import pyvista as pv
+import numpy as np
+def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructured_wedge = False,display_mesh = False,save = None) -> pv.UnstructuredGrid:
+    '''
+    Create a 3D grid with a single element in the z direction to represent a 2D grid in 3D space returns a pyvista Undstructured Grid.
+
+    Supports
+    - Structured Hex and Wedge elements
+    - Unstructured wedge elements
+
+    For unstructured wedge elements, the approximate element size is determined by min of (dx/nx and dy/ny)
+    
+    
+
+    '''
+    gmsh.initialize()
+
+    valid_elements = ['wedge','hex']
+
+
+    element_id = {
+        'wedge':6,
+        'hex':5,
+        'tet':4,
+    }
+
+    pyvista_cell_id = {
+        'wedge':13,
+        'hex':12,
+        'tet':10,
+    }
+
+    num_nodes_per_cell = {
+        'wedge': 6,
+        'hex':8,
+        'tet': 4
+
+    }
+    assert element_type in valid_elements
+
+    gmsh.model.add("2D_Grid")
+    # Step 1: Create 2D rectangle surface
+    rect = gmsh.model.occ.addRectangle(*origin,dx,dy)
+    
+    if element_type == 'wedge' and unstructured_wedge:
+
+        # Split the rectangular surface into triangles
+        # This returns surface tags, which we extrude
+        gmsh.model.occ.fragment([(2, rect)], [])  # Ensures it's ready for face ops
+        gmsh.model.occ.synchronize()
+
+
+        # Mesh.CharacteristicLengthMin = 0.01;
+        # Get the two triangle surfaces from the rectangle
+        surfaces = gmsh.model.getEntities(dim=2)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", min(dx/nx,dy/ny))
+        # gmsh.option.setNumber("Mesh.CharacteristicLengthMin", min(dx/nx,dy/ny))
+        gmsh.model.mesh.field.setAsBackgroundMesh(1)
+        # Extrude each triangle into wedges
+        for s in surfaces:
+            gmsh.model.occ.extrude([s], 0, 0, dz, numElements=[1], recombine=True)
+
+        
+    else:
+        # Step 2: Synchronize to access entities
+        gmsh.model.occ.synchronize()
+
+        # Step 3: Get boundary curves and assign transfinite curves
+        boundary = gmsh.model.getBoundary([(2, rect)], oriented=False)
+        for dim, tag in boundary:
+            start = gmsh.model.getValue(dim, tag, [0.0])
+            end = gmsh.model.getValue(dim, tag, [1.0])
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            if abs(dx) > abs(dy):
+                gmsh.model.mesh.setTransfiniteCurve(tag, nx + 1)
+            else:
+                gmsh.model.mesh.setTransfiniteCurve(tag, ny + 1)
+
+        # Step 4: Transfinite + recombine surface
+        gmsh.model.mesh.setTransfiniteSurface(rect)
+        if element_type == 'hex':
+            gmsh.model.mesh.setRecombine(2, rect)
+
+        # Step 5: Extrude the surface to get a hexahedral block
+        # Returns list of new volumes, surfaces, lines, points
+        ext = gmsh.model.occ.extrude([(2, rect)], *[0, 0, dz], 
+                                    numElements=[1], recombine=True)
+
+    # Generate and write mesh
+    
+    gmsh.model.occ.synchronize()
+    gmsh.model.mesh.generate(3)
+    
+    if save is not None:
+        gmsh.write("{save}.msh")
+
+    if display_mesh:
+        if "-nopopup" not in sys.argv:
+            gmsh.fltk.run()
+    
+    nodes = gmsh.model.mesh.getNodes()[1].reshape(-1,3) # Get Array of N,3 points
+    elements = gmsh.model.mesh.getElementsByType(element_id[element_type])[1].reshape(-1,num_nodes_per_cell[element_type])  # Get an array of (numcells, nodes per cell)
+    gmsh.finalize()
+
+
+    # Pyvista Stuff
+    cells = np.hstack([np.full((elements.shape[0], 1), elements.shape[1],dtype = np.int32),elements],dtype = np.int32)
+    pv_cell_type = pyvista_cell_id[element_type]
+
+    return pv.UnstructuredGrid(cells,np.full(cells.shape[0],pv_cell_type,dtype = np.int32 ),nodes)
