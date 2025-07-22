@@ -1,5 +1,5 @@
 from warp_cfd.FV.model import FVM
-from warp_cfd.FV.terms.field import Field
+from warp_cfd.FV.field import Field
 from warp_cfd.FV.Implicit_Schemes.gradient_interpolation import central_difference
 from warp_cfd.FV.terms.terms import Term
 from typing import Any

@@ -3,8 +3,8 @@ from warp_cfd.FV.model import FVM
 import numpy as np
 from warp_cfd.FV.terms.convection import ConvectionTerm
 from warp_cfd.FV.terms.diffusion import DiffusionTerm
-from warp_cfd.FV.terms.grad import gradTerm
-from warp_cfd.FV.terms.field import Field
+from warp_cfd.FV.terms.grad import GradTerm
+from warp_cfd.FV.field import Field
 from warp_cfd.FV.terms.matrix import Matrix
 import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array

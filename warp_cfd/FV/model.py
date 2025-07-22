@@ -15,7 +15,7 @@ from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
 from warp_cfd.FV.deprecated.intermediate_velocity import intermediate_velocity_step
 from warp_cfd.FV.deprecated.pressure_correction import pressure_correction_step
-from warp_cfd.FV.terms.field import Field
+from warp_cfd.FV.field import Field
 
 
 

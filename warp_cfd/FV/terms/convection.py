@@ -1,7 +1,7 @@
 import warp as wp
 from typing import Any
 from warp_cfd.FV.model import FVM
-from warp_cfd.FV.terms.field import Field
+from warp_cfd.FV.field import Field
 from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.Implicit_Schemes.interpolation import central_difference,upwind,upwindLinear
 

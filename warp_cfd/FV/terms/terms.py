@@ -1,6 +1,6 @@
 import warp as wp
 
-from .field import Field
+from ..field import Field
 
 from warp_cfd.FV.model import FVM
 from typing import Any
