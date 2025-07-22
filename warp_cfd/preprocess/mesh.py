@@ -17,7 +17,7 @@ class group():
 class Mesh():
     def __init__(self,pyvista_mesh: pv.UnstructuredGrid |pv.StructuredGrid,dtype = np.float32,num_outputs = 4) -> None:
         assert isinstance(pyvista_mesh,(pv.UnstructuredGrid,pv.StructuredGrid))
-        assert len(list(pyvista_mesh.cells_dict.keys())) == 1, 'Meshes can only contain a single cell type, Got multiple'
+        assert len(list(pyvista_mesh.cells_dict.keys())) == 1, 'Meshes can only contain a single cell type for now, Got multiple'
         
         self.pyvista_mesh = pyvista_mesh
         self.nodes = np.array(pyvista_mesh.points)
@@ -30,22 +30,25 @@ class Mesh():
         self.cell_centroids = np.array(pyvista_mesh.cell_centers().points,dtype=self.float_dtype)
         self.cell_volumes = np.array(pyvista_mesh.compute_cell_sizes()['Volume'],dtype=self.float_dtype)
         self.groups:dict[str,group] = {}
-        self.cell_check()
+        
         self.num_outputs = num_outputs
         
-        self.face_properties,self.cell_properties = self.get_mesh_properties()
         
         
+        self.support_cell_types = [CellType.HEXAHEDRON,CellType.TETRA,CellType.WEDGE]
         self.gridType = 'Unstructured' if isinstance(pyvista_mesh,pv.UnstructuredGrid) else 'Structured'
+
+        self.cell_check()
+
+        self.face_properties,self.cell_properties = self.get_mesh_properties()
     @property
     def dimension(self):
-        assert self.nodes.shape[-1] == 2 or self.nodes.shape[-1] == 3 
+        assert self.nodes.shape[-1] == 3, 'Only 3 Dimensional Meshes are supported'
         return self.nodes.shape[-1]
-
 
     def cell_check(self):
         if self.dimension == 3:
-            assert self.cellType[1] == CellType.HEXAHEDRON or self.cellType[1] == CellType.TETRA, 'Currently only Tetra and Hexahedron elements are supported' 
+            assert self.cellType[1] in self.support_cell_types, 'only Tetra and Hexahedron and Wedge elements are supported' 
 
     def add_group(self,name,id,group_type):
         group_types = {'face','cell','point','edge'}
@@ -79,24 +82,52 @@ class Mesh():
                 [1, 2, 3]
             ],dtype=self.int_dtype)
 
+            wedge_faces = np.array([
+                [0, 1, 2,-1],
+                [5, 4, 3,-1],
+                [0, 3, 5,1],
+                [0,2,4,3],
+                [1, 5, 4,2],
+                
+            ],dtype=self.int_dtype)
 
+            cell_faces = {
+                CellType.TETRA:tet_faces,
+                CellType.HEXAHEDRON:hex_faces,
+                CellType.WEDGE:wedge_faces,
+            }
 
-            face_idx = tet_faces if self.cellType[1] == CellType.TETRA else hex_faces
+            face_indices = cell_faces[self.cellType[1]]
             # self.face_idx = face_idx
 
-            faces = self.cells[:,face_idx] # (C,F,N) C number of cells, F number of faces per cell, N number of nodes per cell
-            faces_coords = self.nodes[faces] # (C,F,N,3)
-            faces_sorted = np.sort(faces, axis=2)
+            if self.cellType[1] == CellType.WEDGE:
+                faces_sets = [face_indices[0:2,:-1],face_indices[2:]]
+            else:
+                faces_sets = [face_indices]
 
-            # Step 3: Reshape the array to have shape (num_cells*4, 3), where each row is a face.
-            faces_reshaped = faces_sorted.reshape(-1, face_idx.shape[-1])
 
-            # Step 4: Use np.unique to get the unique faces along axis=0.
-            unique_faces, face_ids = np.unique(faces_reshaped, axis=0, return_inverse=True)
+            face_props = []
+            shift_id = 0
+            for face_idx in faces_sets:
+                faces = self.cells[:,face_idx] # (C,F,N) C number of cells, F number of faces per face, N number of nodes per cell
+                
+                faces_coords = self.nodes[faces] # (C,F,N,3)
+                faces_sorted = np.sort(faces, axis=2)
 
-            face_ids = face_ids.reshape(self.cells.shape[0], face_idx.shape[0])
-            face_ids = face_ids.astype(dtype=self.int_dtype) # Watch this line carefully
-            return faces,faces_coords,unique_faces,face_ids
+                # Step 3: Reshape the array to have shape (num_cells*4, 3), where each row is a face.
+                faces_reshaped = faces_sorted.reshape(-1, face_idx.shape[-1])
+
+                # Step 4: Use np.unique to get the unique faces along axis=0.
+                unique_faces, face_ids = np.unique(faces_reshaped, axis=0, return_inverse=True)
+
+                face_ids = face_ids.reshape(self.cells.shape[0], face_idx.shape[0])
+                face_ids = face_ids.astype(dtype=self.int_dtype) # Watch this line carefully
+
+
+                face_props.append([faces,faces_coords,unique_faces,face_ids])
+
+                # shift_id += len(unique_faces)
+            return face_props[0]
 
     @staticmethod
     def calculate_face_normal_and_area(faces,nodes):

@@ -1,5 +1,4 @@
 setup.py
-src/FV/Ops/interpolation.py
 warp_cfd/__init__.py
 warp_cfd.egg-info/PKG-INFO
 warp_cfd.egg-info/SOURCES.txt
@@ -9,9 +8,14 @@ warp_cfd/FV/Cells.py
 warp_cfd/FV/Convergence.py
 warp_cfd/FV/Weights.py
 warp_cfd/FV/__init__.py
-warp_cfd/FV/intermediate_velocity.py
-warp_cfd/FV/pressure_correction.py
+warp_cfd/FV/cells.py
+warp_cfd/FV/convergence.py
+warp_cfd/FV/field.py
+warp_cfd/FV/model.py
 warp_cfd/FV/utils.py
+warp_cfd/FV/Implicit_Schemes/__init__.py
+warp_cfd/FV/Implicit_Schemes/gradient_interpolation.py
+warp_cfd/FV/Implicit_Schemes/interpolation.py
 warp_cfd/FV/Ops/__init__.py
 warp_cfd/FV/Ops/array_ops.py
 warp_cfd/FV/Ops/interpolation.py
@@ -20,5 +24,14 @@ warp_cfd/FV/Ops/mesh_ops.py
 warp_cfd/FV/Ops/ops_class.py
 warp_cfd/FV/Ops/pressure_correction_ops.py
 warp_cfd/FV/Ops/weight_ops.py
+warp_cfd/FV/implicit_Solvers/SIMPLE.py
+warp_cfd/FV/implicit_Solvers/__init__.py
+warp_cfd/FV/terms/__init__.py
+warp_cfd/FV/terms/convection.py
+warp_cfd/FV/terms/diffusion.py
+warp_cfd/FV/terms/grad.py
+warp_cfd/FV/terms/matrix.py
+warp_cfd/FV/terms/terms.py
 warp_cfd/preprocess/__init__.py
+warp_cfd/preprocess/grid.py
 warp_cfd/preprocess/mesh.py

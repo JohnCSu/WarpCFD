@@ -1,7 +1,8 @@
 import warp as wp
 from warp_cfd.FV import FVM
 import numpy as np
-from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Field,Matrix
+from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Matrix
+from warp_cfd.FV.field import Field
 import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array
 
