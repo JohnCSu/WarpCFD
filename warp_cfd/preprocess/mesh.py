@@ -85,10 +85,9 @@ class Mesh():
             wedge_faces = np.array([
                 [0, 1, 2,-1],
                 [5, 4, 3,-1],
-                [0, 3, 5,1],
-                [0,2,4,3],
-                [1, 5, 4,2],
-                
+                [0, 2, 5,3],
+                [1,4,5,2],
+                [0, 3, 4,1],
             ],dtype=self.int_dtype)
 
             cell_faces = {
@@ -101,33 +100,56 @@ class Mesh():
             # self.face_idx = face_idx
 
             if self.cellType[1] == CellType.WEDGE:
-                faces_sets = [face_indices[0:2,:-1],face_indices[2:]]
+                faces_sets = [face_indices[0:2,:-1],face_indices[2:,:]]
             else:
                 faces_sets = [face_indices]
 
+            shift_id =0
+            N = max([f_set.shape[-1] for f_set in faces_sets])
 
             face_props = []
-            shift_id = 0
             for face_idx in faces_sets:
                 faces = self.cells[:,face_idx] # (C,F,N) C number of cells, F number of faces per face, N number of nodes per cell
                 
-                faces_coords = self.nodes[faces] # (C,F,N,3)
+                # faces_coords = self.nodes[faces] # (C,F,N,3)
                 faces_sorted = np.sort(faces, axis=2)
 
-                # Step 3: Reshape the array to have shape (num_cells*4, 3), where each row is a face.
+                # Step 3: Reshape the array to have shape (num_cells*4, N), where each row is a face.
                 faces_reshaped = faces_sorted.reshape(-1, face_idx.shape[-1])
 
                 # Step 4: Use np.unique to get the unique faces along axis=0.
-                unique_faces, face_ids = np.unique(faces_reshaped, axis=0, return_inverse=True)
+                unique_faces, cell_face_ids = np.unique(faces_reshaped, axis=0, return_inverse=True)
 
-                face_ids = face_ids.reshape(self.cells.shape[0], face_idx.shape[0])
-                face_ids = face_ids.astype(dtype=self.int_dtype) # Watch this line carefully
+                cell_face_ids = cell_face_ids.reshape(self.cells.shape[0], face_idx.shape[0])
+                cell_face_ids = cell_face_ids.astype(dtype=self.int_dtype) # Watch this line carefully
+
+                face_areas,face_normals = self.calculate_face_normal_and_area(faces,self.nodes)
+
+                nodes_per_face = unique_faces.shape[-1]
+                node_padding = N-nodes_per_face
+                if node_padding > 0:
+                    unique_faces = np.hstack([unique_faces, -1 * np.ones((unique_faces.shape[0], node_padding), dtype=unique_faces.dtype)])
+                cell_face_ids += shift_id
+
+                nodes_per_face_arr = nodes_per_face*np.ones(len(unique_faces),dtype=self.int_dtype)
+            
+                face_centroid = self.nodes[unique_faces].mean(axis=1)
+
+                face_props.append([unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face_arr,face_centroid])
+
+                shift_id += len(unique_faces)
 
 
-                face_props.append([faces,faces_coords,unique_faces,face_ids])
+            
+            grouped_face_props = list(zip(*face_props)) # Convert the list of lists into single list of tuples 
+            unique_faces = np.concatenate(grouped_face_props[0],axis = 0)
+            cell_face_ids = np.concatenate(grouped_face_props[1],axis = 1)
+            face_areas = np.concatenate(grouped_face_props[2],axis = 1)
+            face_normals = np.concatenate(grouped_face_props[3],axis = 1)
+            nodes_per_face = np.concatenate(grouped_face_props[4],axis = 0)
+            centroid = np.concatenate(grouped_face_props[5],axis = 0)
 
-                # shift_id += len(unique_faces)
-            return face_props[0]
+            return unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid
 
     @staticmethod
     def calculate_face_normal_and_area(faces,nodes):
@@ -168,6 +190,7 @@ class Mesh():
         '''
 
         connections = 'faces' if self.dimension == 3 else 'edges'
+        
         cell_neighbors = np.array([ [i,j] for i in range(len(self.cells)) for j in self.pyvista_mesh.cell_neighbors(i,connections=connections)],dtype = self.int_dtype)
         
         # We want Unique Pairs
@@ -177,14 +200,13 @@ class Mesh():
 
     def get_mesh_properties(self):
         cell_neighbors = self.get_neighbors()
-        faces,faces_coords,unique_faces,cell_face_ids = self.get_faces()
-
-        face_areas,face_normals = self.calculate_face_normal_and_area(faces,self.nodes)
+        unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid = self.get_faces()
         # Face Areas and normals is (C,F) and (C,F,D)
         # Cell Neightbors is (C,k_i) list (variable)
 
         #We should extend the list to also have: Face ID, Face Normal, Face Area, Cell-connected_to, Distance
-        C,F,N = faces.shape
+        C,F,N = self.cells.shape[0],cell_face_ids.shape[-1],unique_faces.shape[-1]
+
         K = unique_faces.shape[0]
         D = self.dimension
         O = self.num_outputs
@@ -199,7 +221,7 @@ class Mesh():
 
         faces.unique_faces = unique_faces # (K,N)
         faces.dimension = self.dimension
-        faces.centroid = self.nodes[faces.unique_faces].mean(axis=1)
+        faces.centroid = face_centroid
         faces.adjacent_cells = np.ones((K,2),dtype = self.int_dtype)*(-1) # -1 means no neighbors
         faces.distance= np.ones((K,self.dimension),dtype= self.float_dtype)*(-1)
         faces.is_boundary = np.ones((K,),dtype=np.uint8) # (K,) bool 1 if BC 0 otherwise for each face
@@ -215,7 +237,7 @@ class Mesh():
         cells.centroids = self.cell_centroids
         cells.volumes = self.cell_volumes
         cells.nodes = self.cells
-        cells.face_coords = faces_coords # (C,F,N,D)
+        # cells.face_coords = faces_coords # (C,F,N,D)
         cells.faces = cell_face_ids
         cells.normal = face_normals
         cells.area = face_areas
@@ -230,7 +252,7 @@ class Mesh():
             faces_i,faces_j = cell_face_ids[i],cell_face_ids[j]
             intersect_face_id,face_i_ind, face_j_ind = np.intersect1d(faces_i,faces_j,return_indices= True)
             
-            assert face_i_ind.shape[0] == 1, 'If this is raised then a cell shares a face with multiple cells'
+            assert face_i_ind.shape[0] == 1, 'If this is raised then a cell shares a face with multiple cells or an error if no intersecting faces exist'
             #Neighbor we need to store: cellID and then the associated face ID
             cells.neighbors[i,face_i_ind[0]] = j            
             cells.neighbors[j,face_j_ind[0]] = i
