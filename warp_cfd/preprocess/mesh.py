@@ -19,10 +19,12 @@ class Mesh():
         assert isinstance(pyvista_mesh,(pv.UnstructuredGrid,pv.StructuredGrid))
         assert len(list(pyvista_mesh.cells_dict.keys())) == 1, 'Meshes can only contain a single cell type for now, Got multiple'
         
-        self.pyvista_mesh = pyvista_mesh
-        self.nodes = np.array(pyvista_mesh.points)
         self.float_dtype = np.float32
         self.int_dtype = np.int32
+
+        self.pyvista_mesh = pyvista_mesh
+        self.nodes = np.array(pyvista_mesh.points,dtype = self.float_dtype)
+        
         _celltype = list(pyvista_mesh.cells_dict.keys())[0]
         self.dtype = dtype
         self.cellType = (CellType(_celltype).name,_celltype)
@@ -32,8 +34,6 @@ class Mesh():
         self.groups:dict[str,group] = {}
         
         self.num_outputs = num_outputs
-        
-        
         
         self.support_cell_types = [CellType.HEXAHEDRON,CellType.TETRA,CellType.WEDGE]
         self.gridType = 'Unstructured' if isinstance(pyvista_mesh,pv.UnstructuredGrid) else 'Structured'
@@ -83,11 +83,11 @@ class Mesh():
             ],dtype=self.int_dtype)
 
             wedge_faces = np.array([
-                [0, 1, 2,-1],
-                [5, 4, 3,-1],
-                [0, 2, 5,3],
-                [1,4,5,2],
-                [0, 3, 4,1],
+                [0, 2, 1,-1],
+                [3, 4, 5,-1],
+                [0, 3, 5,2],
+                [1,2,5,4],
+                [0, 1, 4,3],
             ],dtype=self.int_dtype)
 
             cell_faces = {
@@ -124,14 +124,17 @@ class Mesh():
                 cell_face_ids = cell_face_ids.astype(dtype=self.int_dtype) # Watch this line carefully
 
                 face_areas,face_normals = self.calculate_face_normal_and_area(faces,self.nodes)
+                face_centroid = self.nodes[unique_faces].mean(axis=1)
 
+
+                #Padding for tri faces
                 nodes_per_face = unique_faces.shape[-1]
                 node_padding = N-nodes_per_face
                 if node_padding > 0:
                     unique_faces = np.hstack([unique_faces, -1 * np.ones((unique_faces.shape[0], node_padding), dtype=unique_faces.dtype)])
                 
                 nodes_per_face_arr = nodes_per_face*np.ones(len(unique_faces),dtype=self.int_dtype)
-                face_centroid = self.nodes[unique_faces].mean(axis=1)
+                
 
                 to_face_distance = face_centroid[cell_face_ids] -self.cell_centroids[:,np.newaxis,:]
 
@@ -144,13 +147,13 @@ class Mesh():
 
             
             grouped_face_props = list(zip(*face_props)) # Convert the list of lists into single list of tuples 
-            unique_faces = np.concatenate(grouped_face_props[0],axis = 0)
-            cell_face_ids = np.concatenate(grouped_face_props[1],axis = 1)
-            face_areas = np.concatenate(grouped_face_props[2],axis = 1)
-            face_normals = np.concatenate(grouped_face_props[3],axis = 1)
-            nodes_per_face = np.concatenate(grouped_face_props[4],axis = 0)
-            face_centroid = np.concatenate(grouped_face_props[5],axis = 0)
-            to_face_distance =  np.concatenate(grouped_face_props[6],axis = 1)
+            unique_faces = np.concatenate(grouped_face_props[0],axis = 0,dtype=self.int_dtype)
+            cell_face_ids = np.concatenate(grouped_face_props[1],axis = 1,dtype=self.int_dtype)
+            face_areas = np.concatenate(grouped_face_props[2],axis = 1,dtype=self.float_dtype)
+            face_normals = np.concatenate(grouped_face_props[3],axis = 1,dtype=self.float_dtype)
+            nodes_per_face = np.concatenate(grouped_face_props[4],axis = 0,dtype=self.int_dtype)
+            face_centroid = np.concatenate(grouped_face_props[5],axis = 0,dtype=self.float_dtype)
+            to_face_distance =  np.concatenate(grouped_face_props[6],axis = 1,dtype=self.float_dtype)
 
             return unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid,to_face_distance
 

@@ -128,14 +128,13 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
                             nnz_per_cell:wp.array(dtype=cell_properties.nnz_per_cell.dtype),
                             face_offset_index:wp.array(dtype=cell_properties.face_offset_index.dtype),
                             value_is_fixed:wp.array(dtype=cell_properties.value_is_fixed.dtype),
-                            face_areas:wp.array(dtype=cell_properties.area.dtype)
                             ):
             i = wp.tid()
             cell_structs[i].id = i
             cell_structs[i].centroid = centroids[i]
             cell_structs[i].volume = volumes[i]
             cell_structs[i].faces = face_ids[i]
-            cell_structs[i].face_area = face_areas[i]
+            # cell_structs[i].face_area = face_areas[i]
             cell_structs[i].face_normal = face_normals[i]
             cell_structs[i].neighbors = neighbors[i]
             cell_structs[i].cell_centroid_to_face_centroid = cell_centroid_to_face_centroid[i]
@@ -206,7 +205,7 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
                                                                                         cell_properties.nnz_per_cell,
                                                                                         cell_properties.face_offset_index,
                                                                                         cell_properties.value_is_fixed,
-                                                                                        cell_properties.area])
+                                                                                        ])
         
         wp.launch(kernel=init_face_structs,dim = num_faces,inputs = [
             faces,

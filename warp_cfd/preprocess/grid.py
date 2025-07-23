@@ -3,6 +3,8 @@ import sys
 
 import pyvista as pv
 import numpy as np
+
+from .mesh import Mesh
 def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructured_wedge = False,display_mesh = False,save = None) -> pv.UnstructuredGrid:
     '''
     Create a 3D grid with a single element in the z direction to represent a 2D grid in 3D space returns a pyvista Undstructured Grid.
@@ -113,3 +115,38 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
     pv_cell_type = pyvista_cell_id[element_type]
 
     return pv.UnstructuredGrid(cells,np.full(cells.shape[0],pv_cell_type,dtype = np.int32 ),nodes)
+
+    # return nodes,elements,pv_cell_type
+
+
+
+def define_boundary_walls(m:Mesh):
+    faces = m.face_properties
+    cells = m.cell_properties
+    boundary_ids = m.face_properties.boundary_face_ids
+    face_idx = faces.cell_face_index[boundary_ids,0]
+    cell_ids = faces.adjacent_cells[boundary_ids,0]
+
+    normals = cells.normal[cell_ids,face_idx]
+
+    tol = 1e-3
+
+    # Axis-aligned normal masks
+    is_pos_x = np.abs(normals @ [1, 0, 0] - 1) < tol
+    is_neg_x = np.abs(normals @ [-1, 0, 0] - 1) < tol
+    is_pos_y = np.abs(normals @ [0, 1, 0] - 1) < tol
+    is_neg_y = np.abs(normals @ [0, -1, 0] - 1) < tol
+    is_pos_z = np.abs(normals @ [0, 0, 1] - 1) < tol
+    is_neg_z = np.abs(normals @ [0, 0, -1] - 1) < tol
+
+    # Step 5: Extract individual walls
+    walls = {
+        "+X": boundary_ids[is_pos_x],
+        "-X": boundary_ids[is_neg_x],
+        "+Y": boundary_ids[is_pos_y],
+        "-Y": boundary_ids[is_neg_y],
+        "+Z": boundary_ids[is_pos_z],
+        "-Z": boundary_ids[is_neg_z],
+    }
+    
+    m.add_groups(walls,'face')
