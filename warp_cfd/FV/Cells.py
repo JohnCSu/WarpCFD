@@ -1,7 +1,7 @@
 from warp.types import vector
 from warp import mat
 import warp as wp
-
+from warp_cfd.preprocess.mesh import cells_data,faces_data
 def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
     
     @wp.struct
@@ -66,7 +66,7 @@ def _create_face_struct(nodes_per_face:int,num_outputs = 4,dimension:int = 3, fl
         is_boundary: wp.uint8
         value_is_fixed: vector(length= num_outputs,dtype= wp.uint8) # 1 is fixed, 0 is free
         gradient_is_fixed: vector(length= num_outputs,dtype= wp.uint8) 
-
+        num_nodes:int_dtype
 
     return Face
 
@@ -107,7 +107,7 @@ def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int
 
 
 
-def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties,face_properties,node_properties:wp.array):
+def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:cells_data,face_properties:faces_data,node_properties:wp.array):
         
         cell_struct = cells.dtype
         face_struct = faces.dtype
@@ -156,10 +156,11 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties,fa
                             cell_structs:wp.array(dtype = cell_struct),
                             cell_face_index:wp.array(dtype=face_properties.cell_face_index.dtype),
                             cell_distance:wp.array(dtype=face_properties.distance.dtype),
-                            face_area:wp.array(dtype=cell_properties.area.dtype)
+                            face_area:wp.array(dtype=cell_properties.area.dtype),
+                            num_nodes:wp.array(dtype=face_properties.num_nodes.dtype),
                     ):
             
-            i = wp.tid() # Looping throuhg uniques faces
+            i = wp.tid() # Looping throuhg uniques faces K
             
             face_structs[i].id = i
             face_structs[i].is_boundary = is_boundary_face[i]
@@ -172,7 +173,7 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties,fa
             face_structs[i].adjacent_cells = adjacent_cells[i]
             face_structs[i].cell_face_index = cell_face_index[i] # WE just need the area of either cell
             face_structs[i].area = face_area[adjacent_cells[i][0]][cell_face_index[i][0]]
-
+            face_structs[i].num_nodes = num_nodes[i]
             if is_boundary_face[i] == 0:
                 owner_cell = cell_structs[adjacent_cells[i][0]]
                 neighbor_cell = cell_structs[adjacent_cells[i][1]]
@@ -218,7 +219,8 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties,fa
             cells,
             face_properties.cell_face_index,
             face_properties.distance,
-            cell_properties.area
+            cell_properties.area,
+            face_properties.num_nodes
         ])
         
         wp.launch(kernel=init_node_structs,dim = num_nodes,inputs = [

@@ -129,13 +129,15 @@ class Mesh():
                 node_padding = N-nodes_per_face
                 if node_padding > 0:
                     unique_faces = np.hstack([unique_faces, -1 * np.ones((unique_faces.shape[0], node_padding), dtype=unique_faces.dtype)])
-                cell_face_ids += shift_id
-
+                
                 nodes_per_face_arr = nodes_per_face*np.ones(len(unique_faces),dtype=self.int_dtype)
-            
                 face_centroid = self.nodes[unique_faces].mean(axis=1)
 
-                face_props.append([unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face_arr,face_centroid])
+                to_face_distance = face_centroid[cell_face_ids] -self.cell_centroids[:,np.newaxis,:]
+
+
+                cell_face_ids += shift_id
+                face_props.append([unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face_arr,face_centroid,to_face_distance])
 
                 shift_id += len(unique_faces)
 
@@ -147,9 +149,10 @@ class Mesh():
             face_areas = np.concatenate(grouped_face_props[2],axis = 1)
             face_normals = np.concatenate(grouped_face_props[3],axis = 1)
             nodes_per_face = np.concatenate(grouped_face_props[4],axis = 0)
-            centroid = np.concatenate(grouped_face_props[5],axis = 0)
+            face_centroid = np.concatenate(grouped_face_props[5],axis = 0)
+            to_face_distance =  np.concatenate(grouped_face_props[6],axis = 1)
 
-            return unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid
+            return unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid,to_face_distance
 
     @staticmethod
     def calculate_face_normal_and_area(faces,nodes):
@@ -200,7 +203,7 @@ class Mesh():
 
     def get_mesh_properties(self):
         cell_neighbors = self.get_neighbors()
-        unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid = self.get_faces()
+        unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid,to_face_distance = self.get_faces()
         # Face Areas and normals is (C,F) and (C,F,D)
         # Cell Neightbors is (C,k_i) list (variable)
 
@@ -222,6 +225,7 @@ class Mesh():
         faces.unique_faces = unique_faces # (K,N)
         faces.dimension = self.dimension
         faces.centroid = face_centroid
+        faces.num_nodes = nodes_per_face
         faces.adjacent_cells = np.ones((K,2),dtype = self.int_dtype)*(-1) # -1 means no neighbors
         faces.distance= np.ones((K,self.dimension),dtype= self.float_dtype)*(-1)
         faces.is_boundary = np.ones((K,),dtype=np.uint8) # (K,) bool 1 if BC 0 otherwise for each face
@@ -241,7 +245,7 @@ class Mesh():
         cells.faces = cell_face_ids
         cells.normal = face_normals
         cells.area = face_areas
-        cells.cell_centroid_to_face_centroid =  faces.centroid[cells.faces] - self.cell_centroids[:,np.newaxis,:]
+        cells.cell_centroid_to_face_centroid =  to_face_distance
         cells.neighbors = np.ones((C,F),dtype = self.int_dtype)*(-1) # --1 for no neighbot (external face), otherwise give cell neighbor ID and faceID
         cells.face_side = np.zeros((C,F),dtype = self.int_dtype)
         cells.nnz_per_cell = np.ones(C,dtype = self.int_dtype) # add 1 each time a cell appears in the for loop below
@@ -284,9 +288,6 @@ class Mesh():
         cells.face_offset_index = (cells.neighbors != -1)
         cells.face_offset_index = np.array(np.cumsum(cells.face_offset_index,axis=1)*cells.face_offset_index,dtype= self.int_dtype)
         
-         
-
-
         return faces,cells
 
 
@@ -381,8 +382,6 @@ class cells_data():
     int_dtype: np.dtype = np.int32
     '''dtype used for interger point arrays. Default float32'''
     
-    
-
     num_cells:int
     '''Number of cells'''
     faces_per_cell:int
@@ -500,6 +499,10 @@ class faces_data():
     '''(K,2) array for a given face, return the adjacent cells'''
     cell_face_index: np.ndarray| wp.array
     '''(K,2) array for a given face ID, return the face index that face ID occupies in the adjacent cells'''
+    num_nodes: np.ndarray| wp.array
+    '''
+    (K) array of ints that says how many nodes comprise said face. Useful for Wedge elements
+    '''
 
     distance: np.ndarray| wp.array
     '''(K,3) array that stores the centroid distance vector between 2 neighboring cells. If a face is not connected to a neighboring cell, distance is set to -1'''
@@ -515,7 +518,7 @@ class faces_data():
     '''dtype used for interger point arrays. Default float32'''
 
     nodes_per_face:int
-    '''Number of nodes PER FACE'''
+    '''MAXIMUM Number of nodes PER FACE'''
     num_faces:int
     '''Number of Unique Faces'''
     vars_mapping: dict = {
