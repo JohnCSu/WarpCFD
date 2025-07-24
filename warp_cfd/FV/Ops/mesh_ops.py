@@ -77,8 +77,6 @@ class Mesh_Ops(Ops):
                 face_values[face_id,output] = central_difference(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
             elif interpolation_method == 1: # Upwind
                 face_values[face_id,output] = upwind(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
-            else:
-                face_values[face_id,output]= wp.nan
 
         
         @wp.kernel

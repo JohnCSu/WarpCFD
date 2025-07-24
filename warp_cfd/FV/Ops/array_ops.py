@@ -142,13 +142,13 @@ def L_norm_1D_array(a:wp.array,power:float,reduction = None):
     else:
         raise ValueError('reduction can be either string "sum" or Nonetype')
 
-def to_vector_array(array:np.ndarray):
+def to_vector_array(array:np.ndarray,float_dtype = wp.float32):
     '''
     Convert numpy array to warp array with dtype = vector. For shapes >=2, the last array axis is treated 
     as the vector dimension so a (N,M) numpy array becomes an (N,) warp array with dtype: vector(length=M)
     '''
-    dtype = wp.dtype_from_numpy(array.dtype)
+    # dtype = wp.dtype_from_numpy(array.dtype)
     shape = array.shape
     n = shape[-1]
-    vector_type = wp.types.vector(length = n, dtype = dtype)
+    vector_type = wp.types.vector(length = n, dtype = float_dtype)
     return wp.array(data = array,dtype=vector_type)

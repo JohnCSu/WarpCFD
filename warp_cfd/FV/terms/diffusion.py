@@ -11,7 +11,7 @@ class DiffusionTerm(Term):
         #Define interpolation function
         self.interpolation = interpolation
         if interpolation == 'central difference':
-            self.interpolation_function = central_difference
+            self.interpolation_function = central_difference(fv.float_dtype)
         else:
             assert custom_interpolation is not None, 'if interpolation is not central difference, a wp.func needs to be passed into custom_interpolation'
 
@@ -49,6 +49,8 @@ class DiffusionTerm(Term):
 
 
 def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+    
+    von_neumann_value = float_dtype(von_neumann_value)
     @wp.kernel
     def von_neumann_BC_diffusion_kernel(boundary_ids:wp.array(dtype=int),
                                         viscosity:wp.array(dtype=float_dtype),
@@ -69,8 +71,8 @@ def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,face_st
         else:
             nu = viscosity[face_id]
         
-        weights[owner_cell_id,face_idx,0,0] = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-        weights[owner_cell_id,face_idx,0,1] = 0.
+        weights[owner_cell_id,face_idx,0,0] = float_dtype(0.) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+        weights[owner_cell_id,face_idx,0,1] = float_dtype(0.)
         weights[owner_cell_id,face_idx,0,2] = nu*von_neumann_value*face.area    
 
     return von_neumann_BC_diffusion_kernel
@@ -99,7 +101,7 @@ def create_dirichlet_BC_kernel(dirichlet_value,cell_struct,face_struct,float_dty
         weight = nu*(face.area)/cell_centroid_to_face_centroid_magnitude
         
         weights[owner_cell_id,face_idx,0,0] = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-        weights[owner_cell_id,face_idx,0,1] = 0.
+        weights[owner_cell_id,face_idx,0,1] = float_dtype(0.)
         weights[owner_cell_id,face_idx,0,2] = weight*dirichlet_value
     
     return dirichlet_BC_kernel_BC_diffusion_kernel
@@ -132,15 +134,15 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,face_struct,float_dtype = wp
         face_idx = face.cell_face_index[0]
 
         if face.gradient_is_fixed[global_var_idx]:
-            weights[owner_cell_id,face_idx,output,0] = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-            weights[owner_cell_id,face_idx,output,1] = 0.
+            weights[owner_cell_id,face_idx,output,0] = float_dtype(0.) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+            weights[owner_cell_id,face_idx,output,1] = float_dtype(0.)
             weights[owner_cell_id,face_idx,output,2] = nu*boudary_gradients[face_id,global_var_idx]*face.area    
         else:
             cell_centroid_to_face_centroid_magnitude = wp.length(cell_structs[owner_cell_id].cell_centroid_to_face_centroid[face_idx])
             weight = nu*(face.area)/cell_centroid_to_face_centroid_magnitude
             
             weights[owner_cell_id,face_idx,output,0] = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-            weights[owner_cell_id,face_idx,output,1] = 0.
+            weights[owner_cell_id,face_idx,output,1] = float_dtype(0.)
             weights[owner_cell_id,face_idx,output,2] = weight*boundary_values[face_id,global_var_idx]
 
     return diffusion_BC_kernel
@@ -152,7 +154,7 @@ def create_diffusion_scheme(interpolation_function,cell_struct,face_struct,float
                                  viscosity:wp.array(dtype=float_dtype),
                                  cell_values:wp.array2d(dtype = float_dtype),
                                 cell_gradients:wp.array2d(dtype = Any),
-                                mass_fluxes:wp.array(dtype=float),
+                                mass_fluxes:wp.array(dtype=float_dtype),
                                 cell_structs:wp.array(dtype = cell_struct),
                                 face_structs:wp.array(dtype = face_struct),
                                 weights:wp.array(ndim=4,dtype=float_dtype),

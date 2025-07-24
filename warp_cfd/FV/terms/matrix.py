@@ -23,7 +23,7 @@ class Matrix():
 
         self.linear_solver = solver
         self.max_iter = 500
-        self.tol = 1.e-7
+        self.tol = 1.e-6
 
         need_globals = True
         for f in fields:

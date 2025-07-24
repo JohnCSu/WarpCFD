@@ -419,7 +419,7 @@ class cells_data():
 
 
 
-    def to_NVD_warp(self):
+    def to_NVD_warp(self,float_type = wp.float32):
         '''Convert Arrays to Warp Arrays, if the last dimension matches that of the dimension in faces class, assume its a vector'''
 
         
@@ -434,20 +434,25 @@ class cells_data():
 
                 shape = val.shape
                 n = val.shape[-1]
-                if len(val.shape) == 3 : # Treat this as a matrix
+                if np.issubdtype(val.dtype, np.floating):
+                    dtype = float_type
+                else: # float
                     dtype = wp.dtype_from_numpy(val.dtype)
+
+                if len(val.shape) == 3 : # Treat this as a matrix
+                    
                     # vector_type = wp.types.vector(length = n, dtype = dtype)
                     matrix_type = wp.mat(shape = (val.shape[1:]),dtype=dtype)
                     f = wp.array(data = val, dtype = matrix_type )
                 elif len(val.shape) == 2:
-                    if n == self.dimension: # If the last matches dimension then we set the last axis as a vec3 
-                        f = wp.array(data = val,dtype=wp.vec3)
-                    else:
-                        dtype = wp.dtype_from_numpy(val.dtype)
-                        vector_type = wp.types.vector(length = n, dtype = dtype)
-                        f = wp.array(data = val, dtype=vector_type)
+                    # if n == self.dimension: # If the last matches dimension then we set the last axis as a vec3 
+                    #     f = wp.array(data = val,dtype=wp.vec3)
+                    # else:
+                    # dtype = wp.dtype_from_numpy(val.dtype) if np.issubdtype(val.dtype, np.integer) else float_type
+                    vector_type = wp.types.vector(length = n, dtype = dtype)
+                    f = wp.array(data = val, dtype=vector_type)
                 else:
-                    f = wp.array(data = val) # implicit use the dtype defined in numpy array
+                    f = wp.array(data = val,dtype = dtype) # implicit use the dtype defined in numpy array
 
                 setattr(cells,key,f)
             else:
@@ -570,7 +575,7 @@ class faces_data():
         if overwrite_boundary:
             self.boundary_value_is_fixed[idx] = False
         
-    def to_NVD_warp(self):
+    def to_NVD_warp(self,float_type = wp.float32):
         '''Convert Arrays to Warp Arrays, if the last dimension matches that of the dimension in faces class, assume its a vector'''
 
 
@@ -585,20 +590,25 @@ class faces_data():
 
                 shape = val.shape
                 n = val.shape[-1]
-                if len(val.shape) == 3 : # Treat this as a matrix
+                if np.issubdtype(val.dtype, np.floating):
+                    dtype = float_type
+                else: # float
                     dtype = wp.dtype_from_numpy(val.dtype)
+                    
+                if len(val.shape) == 3 : # Treat this as a matrix
+                    # dtype = wp.dtype_from_numpy(val.dtype) if not np.issubdtype(val.dtype, np.floating) else float_type
                     # vector_type = wp.types.vector(length = n, dtype = dtype)
                     matrix_type = wp.mat(shape = (val.shape[1:]),dtype=dtype)
                     f = wp.array(data = val, dtype = matrix_type )
                 elif len(val.shape) == 2:
-                    if n == self.dimension: # If the last matches dimension then we set the last axis as a vec3 
-                        f = wp.array(data = val,dtype=wp.vec3)
-                    else:
-                        dtype = wp.dtype_from_numpy(val.dtype)
-                        vector_type = wp.types.vector(length = n, dtype = dtype)
-                        f = wp.array(data = val, dtype=vector_type)
+                    # if n == self.dimension: # If the last matches dimension then we set the last axis as a vec3 
+                    #     f = wp.array(data = val,dtype=wp.vec3)
+                    # else:
+                    # dtype = wp.dtype_from_numpy(val.dtype) if not np.issubdtype(val.dtype, np.floating) else float_type
+                    vector_type = wp.types.vector(length = n, dtype = dtype)
+                    f = wp.array(data = val, dtype=vector_type)
                 else:
-                    f = wp.array(data = val) # implicit use the dtype defined in numpy array
+                    f = wp.array(data = val,dtype= dtype) # implicit use the dtype defined in numpy array
 
                 setattr(faces,key,f)
             else:

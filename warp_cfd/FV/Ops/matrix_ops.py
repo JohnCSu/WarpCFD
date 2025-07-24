@@ -128,9 +128,9 @@ class Matrix_Ops(Ops):
             for nnz_idx in range(col_start,col_end):
                 column = bsr_columns[nnz_idx]
                 if row_id == column: #Diagonal
-                    bsr_values[nnz_idx] = 1.
+                    bsr_values[nnz_idx] = self.float_dtype(1.)
                 else: # Off diagonal
-                    bsr_values[nnz_idx] = 0.
+                    bsr_values[nnz_idx] = self.float_dtype(0.)
             
             b[row_id] = rhs_values[row_id] # Replace the row with the specified value
 
@@ -161,7 +161,7 @@ class Matrix_Ops(Ops):
                                 values:wp.array(dtype= self.float_dtype),
                                 b:wp.array(dtype=self.float_dtype),
                                 cell_values:wp.array2d(dtype=self.float_dtype),
-                                alpha:float,
+                                alpha:self.float_dtype,
                                 output_indices:wp.array(dtype=int)):
             ''' Can be optimised to only take diag ahead of time'''
             i = wp.tid()
@@ -178,7 +178,7 @@ class Matrix_Ops(Ops):
                 cell_id = row//num_outputs
                 cell_value = cell_values[cell_id,output]
                 
-                b[row] +=  (1.-alpha)/alpha*values[i]*cell_value
+                b[row] +=  (self.float_dtype(1.)-alpha)/alpha*values[i]*cell_value
                 values[i] = values[i]/alpha
                 
             # For Matrix:  ap/alpha and LHS: add (1-alpha)/alpha*ap*u_old
@@ -186,7 +186,7 @@ class Matrix_Ops(Ops):
         @wp.kernel
         def add_RHS_vector(rhs:wp.array(dtype=self.float_dtype),
                            arr:wp.array(dtype=self.float_dtype),
-                           scale:float):
+                           scale:self.float_dtype):
             
             i = wp.tid()
             wp.atomic_add(rhs,i,scale*arr[i])

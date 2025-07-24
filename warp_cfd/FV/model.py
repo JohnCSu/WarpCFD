@@ -55,21 +55,21 @@ class FVM():
     '''
     Base Class that takes in class Mesh and creates the appropriate object to form terms
     '''
-    def __init__(self,mesh:Mesh,output_variables = None,density:float = 1000,viscosity:float = 1e-3,dtype = wp.float32,int_dtype = wp.int32):
+    def __init__(self,mesh:Mesh,output_variables = None,density:float = 1000,viscosity:float = 1e-3,float_dtype = wp.float32,int_dtype = wp.int32):
         self.density = density
         self.viscosity = viscosity
         self.gridType:str = mesh.gridType
         self.dimension:int = mesh.dimension
-        self.float_dtype = dtype
+        self.float_dtype = float_dtype
         self.int_dtype = int_dtype
         self.cellType = mesh.cellType
 
         self.settings = CFD_settings()
         self.Convergence = Convergence()
 
-        self.face_properties = mesh.face_properties.to_NVD_warp()
-        self.cell_properties = mesh.cell_properties.to_NVD_warp()
-        self.node_properties = to_vector_array(mesh.nodes) 
+        self.face_properties = mesh.face_properties.to_NVD_warp(self.float_dtype)
+        self.cell_properties = mesh.cell_properties.to_NVD_warp(self.float_dtype)
+        self.node_properties = to_vector_array(mesh.nodes,self.float_dtype) 
         # Output for each cell: T,C,4 (u,v,w,p)
         self.input_variables = ['x','y','z','t']
         
@@ -118,7 +118,7 @@ class FVM():
         '''
         Initialises The Model. For now assume that the mesh and BC are both Fixed in Time
         '''
-        Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties)
+        Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
         self.mesh_ops.init()
         self.weight_ops.init()
         self.matrix_ops.init()
@@ -129,6 +129,7 @@ class FVM():
         self.intermediate_velocity_step.init(self.cells,self.faces)
         self.pressure_correction_step.init(self.cells,self.faces)
 
+        
         self.init_global_arrays()
     
 
@@ -150,7 +151,8 @@ class FVM():
         self.D_cell = wp.zeros(shape = self.num_cells,dtype = self.float_dtype)
         self.mass_fluxes = wp.zeros(shape = (self.num_faces),dtype= self.float_dtype)
     
-
+        self.update_cell_values_kernel = update_cell_values(self.float_dtype)
+        self.update_cell_values_multi_kernel = update_cell_values_multi(self.float_dtype)
     def struct_member_to_array(self,member = 'mass_fluxes',struct = 'cells'):
         if struct == 'cells':
             struct_ = self.cell_struct
@@ -171,7 +173,7 @@ class FVM():
         self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
         # self.mesh_ops.apply_cell_value(self.cells)
         self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.p_index,interpolation_method=0)
-        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.vel_indices,interpolation_method=1)
+        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.vel_indices,interpolation_method=0)
     def calculate_gradients(self):
         self.cell_gradients.zero_()
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
@@ -251,34 +253,42 @@ class FVM():
                 value = v
                 # value = wp.array([value],dtype= self.float_dtype)
 
-            wp.launch(kernel=update_cell_values_multi,dim = self.num_cells, inputs = [field_idx,scale,value,self.cell_values])
+            wp.launch(kernel=self.update_cell_values_multi_kernel,dim = self.num_cells, inputs = [field_idx,scale,value,self.cell_values])
 
         else:
             if isinstance(value,float):
                 value = wp.array([value],dtype= self.float_dtype)    
-            wp.launch(kernel=update_cell_values,dim = self.num_cells, inputs = [field_idx,scale,value,self.cell_values])
+            wp.launch(kernel=self.update_cell_values_kernel,dim = self.num_cells, inputs = [field_idx,scale,value,self.cell_values])
 
 
-@wp.kernel
-def update_cell_values(field_idx:int,scale:float,field_value:wp.array(dtype=float),cell_values:wp.array2d(dtype = float)):
-    i = wp.tid() # C
-    
-    if field_value.shape[0] == 1:
-        value = field_value[0]
-    else:
-        value = field_value[i]
+def update_cell_values(float_dtype):
+    @wp.kernel
+    def _update_cell_values(field_idx:int,scale:float_dtype,field_value:wp.array(dtype=float_dtype),cell_values:wp.array2d(dtype = float_dtype)):
+        i = wp.tid() # C
+        
+        if field_value.shape[0] == 1:
+            value = field_value[0]
+        else:
+            value = field_value[i]
 
-    wp.atomic_add(cell_values,i,field_idx,scale*value)
+        wp.atomic_add(cell_values,i,field_idx,scale*value)
+
+    return _update_cell_values
 
 
+def update_cell_values_multi(float_dtype):
+    @wp.kernel
+    def _update_cell_values_multi(output_idx:wp.array(dtype=int),scale:float_dtype,field_value:wp.array2d(dtype=float_dtype),cell_values:wp.array2d(dtype = float_dtype)):
+        i,o = wp.tid() # C,O
+        
+        if field_value.shape[0] == 1:
+            value = field_value[0,0]
+        else:
+            value = field_value[i,o]
 
-@wp.kernel
-def update_cell_values_multi(output_idx:wp.array(dtype=int),scale:float,field_value:wp.array2d(dtype=float),cell_values:wp.array2d(dtype = float)):
-    i,o = wp.tid() # C,O
-    
-    if field_value.shape[0] == 1:
-        value = field_value[0,0]
-    else:
-        value = field_value[i,o]
+        wp.atomic_add(cell_values,i,output_idx[o],scale*value)
+    return _update_cell_values_multi
 
-    wp.atomic_add(cell_values,i,output_idx[o],scale*value)
+
+# wp.overload(update_cell_values,[int,wp.float64,wp.float64,wp.array(dtype=wp.float64),wp.array2d(dtype=wp.float64)])
+# wp.overload(update_cell_values_multi,[int,wp.float64,wp.float64,wp.array2d(dtype=wp.float64),wp.array2d(dtype=wp.float64)])

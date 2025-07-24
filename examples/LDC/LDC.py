@@ -4,17 +4,20 @@ import numpy as np
 import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array
 from warp_cfd.FV.implicit_Solvers import SIMPLE
-
+from warp_cfd.preprocess import Mesh
 wp.config.mode = "debug"
 wp.init()
 if __name__ == '__main__':
     from grid import create_hex_grid
     # wp.clear_kernel_cache()
-    n = 41
+    n = 51
     w,l = 1.,1.
     Re = 100
     G,nu = 1,1/Re
     m = create_hex_grid(n,n,1,(w/n,l/n,0.1))
+    
+    
+
 
     # IC = np.load(f'benchmark_n{n}.npy')
     m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip

@@ -10,9 +10,9 @@ class ConvectionTerm(Term):
         super().__init__(fv,field,True,True)
 
         self.interpolation_functions = {
-            'upwind': upwind,
-            'central difference':central_difference,
-            'upwindLinear':upwindLinear, 
+            'upwind': upwind(fv.float_dtype),
+            'central difference':central_difference(fv.float_dtype),
+            'upwindLinear':upwindLinear(fv.float_dtype), 
             'custom':None # To keep assertion check easy
         }
 
@@ -45,7 +45,7 @@ def create_convection_scheme(interpolation_function,cell_struct,face_struct,floa
     def convection_weights_kernel(cell_values:wp.array2d(dtype = float_dtype),
                                                 cell_gradients:wp.array2d(dtype = Any),
                                                 face_values:wp.array2d(dtype = float_dtype),
-                                                mass_fluxes:wp.array(dtype=float),
+                                                mass_fluxes:wp.array(dtype=float_dtype),
                                                 cell_structs:wp.array(dtype = cell_struct),
                             face_structs:wp.array(dtype = face_struct),
                             weights:wp.array(ndim=4,dtype=float_dtype),
@@ -62,8 +62,8 @@ def create_convection_scheme(interpolation_function,cell_struct,face_struct,floa
         neighbor_cell_id = face.adjacent_cells[1]
         if face.is_boundary == 1:
             face_idx = face.cell_face_index[0]
-            weights[owner_cell_id,face_idx,output,0] = 0. # Set the contribtuion to owner to 0 as for boundary term goes to RHS
-            weights[owner_cell_id,face_idx,output,1] = 0.
+            weights[owner_cell_id,face_idx,output,0] = float_dtype(0.) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
+            weights[owner_cell_id,face_idx,output,1] = float_dtype(0.)
             weights[owner_cell_id,face_idx,output,2]= mass_fluxes[face_id]*face_values[face_id,global_var_idx]
 
         else: # internal Faces

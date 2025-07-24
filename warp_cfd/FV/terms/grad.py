@@ -12,15 +12,15 @@ class GradTerm(Term):
 
         self.weights = wp.zeros(shape= fv.num_cells*fv.dimension,dtype= self.float_dtype)
 
-        self.get_gradTerm = create_gradTerm(fv.cell_struct,fv.dimension)
+        self.get_gradTerm = create_gradTerm(fv.cell_struct,fv.dimension,float_dtype = self.float_dtype)
 
     def calculate_weights(self, fv: FVM, **kwargs: Any) -> Any:
         wp.launch(kernel=self.get_gradTerm,dim = (fv.num_cells,fv.dimension),inputs = [self.weights,fv.cell_gradients,fv.cells,self.fields[0].index])
 
 
-def create_gradTerm(cell_struct,dimension):
+def create_gradTerm(cell_struct,dimension,float_dtype):
     @wp.kernel
-    def get_gradTerm(weights:wp.array(dtype= float),cell_gradients:wp.array2d(dtype= Any),cell_structs:wp.array(dtype=cell_struct),global_output_var:int):
+    def get_gradTerm(weights:wp.array(dtype= float_dtype),cell_gradients:wp.array2d(dtype= Any),cell_structs:wp.array(dtype=cell_struct),global_output_var:int):
         i,dim = wp.tid() # Go by C,dim
         
         row = i*dimension + dim

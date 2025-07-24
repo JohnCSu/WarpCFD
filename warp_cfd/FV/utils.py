@@ -78,11 +78,11 @@ def green_gauss_gradient(val_arr:wp.array,grad_arr:wp.array,coeff: float | wp.ar
 
 
 @wp.kernel
-def green_gauss_gradient_kernel(val_arr:wp.array(dtype = float),
-                         grad_arr:wp.array2d(dtype = float),
+def green_gauss_gradient_kernel(val_arr:wp.array(dtype = Any),
+                         grad_arr:wp.array2d(dtype = Any),
                          cell_structs:wp.array(dtype=Any),
                          face_structs:wp.array(dtype=Any),
-                         coeff:wp.array(dtype=float)
+                         coeff:wp.array(dtype=Any)
                          ):
     i,j = wp.tid() # C,F
 

@@ -91,7 +91,7 @@ TETRA_FACE = _create_face_struct(nodes_per_face=3)
 
 
 def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
-    assert float_dtype == wp.float32 and int_dtype == wp.int32, 'only 32bit int and float are supported'
+    assert int_dtype == wp.int32, 'only 32bit int is supported'
 
     if nodes_per_cell == 8 and faces_per_cell == 8 and num_outputs == 4 and dimension == 3 and nodes_per_face == 4:
         return HEX,HEX_FACE,NODE3D
@@ -107,7 +107,7 @@ def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int
 
 
 
-def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:cells_data,face_properties:faces_data,node_properties:wp.array):
+def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:cells_data,face_properties:faces_data,node_properties:wp.array,float_dtype:wp.Float = wp.float32):
         
         cell_struct = cells.dtype
         face_struct = faces.dtype
@@ -180,7 +180,7 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
                 psi = wp.length(owner_centroid_to_face)/wp.length(wp.sub(owner_cell.centroid,neighbor_cell.centroid))
                 
                 face_structs[i].norm_distance[0] = psi
-                face_structs[i].norm_distance[1] =1.-psi
+                face_structs[i].norm_distance[1] =float_dtype(1.)-psi
                 face_structs[i].cell_distance = cell_distance[i]
         
         

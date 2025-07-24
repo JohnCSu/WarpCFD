@@ -101,7 +101,7 @@ class Convergence:
 
 
 @wp.kernel
-def continuity_error(div_u:wp.array(dtype=float),local_Err:wp.array(dtype=float)):
+def continuity_error(div_u:wp.array(dtype=Any),local_Err:wp.array(dtype=Any)):
     i = wp.tid()
     wp.atomic_add(local_Err,i,wp.abs(div_u[i]))
    
