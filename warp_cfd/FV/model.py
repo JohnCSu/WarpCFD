@@ -63,7 +63,8 @@ class FVM():
         self.float_dtype = float_dtype
         self.int_dtype = int_dtype
         self.cellType = mesh.cellType
-
+        self.mesh = mesh
+        assert mesh.num_outputs == len(output_variables), 'Number of defined output variables must match number of outputs given in mesh'
         self.settings = CFD_settings()
         self.Convergence = Convergence()
 
@@ -78,7 +79,8 @@ class FVM():
         else:
             self.output_variables = output_variables
 
-        self.fields = [Field(output,i) for i,output in enumerate(self.output_variables)]
+        self.fields = {output:Field(output,i) for i,output in enumerate(self.output_variables)}
+        
         self.vars_mapping = {var:i for i,var in enumerate(self.output_variables)}
         self.output_indices = wp.array(np.arange(len(self.output_variables)),dtype=self.int_dtype)
         self.vel_indices = wp.array([0,1,2],dtype=self.int_dtype)
@@ -103,9 +105,6 @@ class FVM():
         '''Array of node structs for storing inforation about nodes (mainly id and coordinates)'''
 
         self.face_viscosity = None
-        
-        # self.steps = 0
-        
 
         Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.weight_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
 
@@ -115,24 +114,13 @@ class FVM():
         self.pressure_correction_ops = Pressure_correction_Ops(*Ops_args)
     
     def init_step(self):
-        '''
-        Initialises The Model. For now assume that the mesh and BC are both Fixed in Time
-        '''
         Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
         self.mesh_ops.init()
         self.weight_ops.init()
         self.matrix_ops.init()
-        self.pressure_correction_ops.init()
-        self.intermediate_velocity_step = intermediate_velocity_step(self.mesh_ops,self.weight_ops,self.matrix_ops)
-        self.pressure_correction_step = pressure_correction_step(self.mesh_ops,self.weight_ops,self.matrix_ops,self.pressure_correction_ops)
-        
-        self.intermediate_velocity_step.init(self.cells,self.faces)
-        self.pressure_correction_step.init(self.cells,self.faces)
-
-        
+        self.pressure_correction_ops.init()        
         self.init_global_arrays()
     
-
     def set_initial_conditions(self,IC):
         self.mesh_ops.set_initial_conditions(IC,self.cell_values)
 
@@ -232,19 +220,26 @@ class FVM():
         return self.Convergence.has_converged()
     
 
-    def replace_cell_values(self,field_idx:int,value:float | wp.array):
+    def replace_cell_values(self,field_idx:int | list | tuple |wp.array,value:float | wp.array):
         '''
         Completely Override the values stored in the cell values array. To add to the cell values, see `update_cell_values()` method instead
         '''
-        if isinstance(field_idx,(list,tuple,wp.array)):
-            field_idx = wp.array(field_idx,dtype=wp.int32) 
+
+        if isinstance(field_idx,int):
+            field_idx = [field_idx]
+        # if isinstance(field_idx,(list,tuple,wp.array)):
+        field_idx = wp.array(field_idx,dtype=wp.int32)
+
         self.matrix_ops.fill_outputs_from_matrix_vector(self.cell_values,value,field_idx)
 
 
-    def update_cell_values(self,field_idx:int,value:float | wp.array,scale : float = 1.):
+    def update_cell_values(self,field_idx:int | list | tuple |wp.array,value:float | wp.array,scale : float = 1.):
         '''
         add the value to the cell values array. To completely replace the cell values, see `replace_cell_values()` method instead
         '''
+        # if isinstance(field_idx,int):
+        #     field_idx = [field_idx]
+
         if isinstance(field_idx,(list,tuple,wp.array)):
             field_idx = wp.array(field_idx,dtype=wp.int32) 
             if isinstance(value,float):

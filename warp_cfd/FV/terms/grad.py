@@ -1,13 +1,12 @@
 from warp_cfd.FV.model import FVM
 from warp_cfd.FV.field import Field
-from warp_cfd.FV.Implicit_Schemes.gradient_interpolation import central_difference
 from warp_cfd.FV.terms.terms import Term
 from typing import Any
 import warp as wp
 
 class GradTerm(Term):
-    def __init__(self, fv: FVM, field: Field ) -> None:
-        assert isinstance(field, Field), 'grad Term can only be in terms of 1 field only'
+    def __init__(self, fv: FVM, field: str ) -> None:
+        assert isinstance(field,str), 'grad Term can only be in terms of 1 field string name only'
         super().__init__(fv, field, implicit= False, need_global_index= True)
 
         self.weights = wp.zeros(shape= fv.num_cells*fv.dimension,dtype= self.float_dtype)

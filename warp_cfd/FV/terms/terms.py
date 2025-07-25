@@ -8,21 +8,35 @@ from typing import Any
 class Term:
     weights: wp.array
     scale: float
-    global_output_indices: None
+    global_output_indices: wp.array
     need_global_index:bool
     fields: list[Field]
 
-    def __init__(self,fv:FVM, fields: Field| list[Field],implicit,need_global_index:bool) -> None:
-        if isinstance(fields,Field):
-            self.fields = [fields]
-        elif isinstance(fields,(list,tuple)):
-            for f in fields:
-                assert isinstance(f,Field) ,'all elements in list or tuple field must be of type Field'
-            self.fields = fields
-        else:
-            raise ValueError('must be type Field or list/tuple of Fields')
+    def __init__(self,fv:FVM, fields: str | list[str],implicit,need_global_index:bool) -> None:
+        
+        self.fields = []
+        if need_global_index: # We need to check that the fields given are in the model
+            if isinstance(fields,str):
+                fields = [fields]
 
-        self.field_index = {
+            if isinstance(fields,(list,tuple)): # This hurts my eyes but it wrokss,..,.,..
+                for field_name in fields:
+                    if field_name in fv.output_variables:
+                        self.fields.append(fv.fields[field_name])
+                    else:
+                        raise ValueError(f'Field {field_name} was not found in original model only variables {fv.output_variables} are available')
+                    
+                self.global_output_indices = wp.array([f.index for f in self.fields],dtype= wp.int32)
+
+
+        else:
+            assert isinstance(fields,str), 'Only one field variable can be defined if global index is False'
+            self.fields.append(Field(fields,index= -1))
+            self.global_output_indices = wp.zeros(1,dtype=wp.int32) 
+
+        self.need_global_index = need_global_index
+
+        self.local_field_index = { # Local field index
             f.name : i for i,f in enumerate(self.fields)
         }
 
@@ -32,11 +46,6 @@ class Term:
         if self.implicit:
             self.weights = wp.array(shape=(fv.num_cells,fv.faces_per_cell,self.num_outputs,3),dtype=fv.float_dtype)
 
-        if need_global_index:
-            for f in self.fields:
-                assert f.name in fv.output_variables , 'A specified field does not exist in FVM object'
-
-            self.global_output_indices = wp.array([f.index for f in self.fields],dtype= wp.int32)
 
         else:
             self.global_output_indices = wp.empty(shape = 1,dtype= fv.int_dtype)

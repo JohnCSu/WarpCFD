@@ -10,11 +10,11 @@ wp.init()
 if __name__ == '__main__':
     np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
     # wp.clear_kernel_cache()
-    n = 51
+    n = 2
     w,l = 1.,1.
     Re = 100
     G,nu = 1,1/Re
-    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,element_type= 'hex',display_mesh= False)
+    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,element_type= 'wedge',display_mesh= True,save = 'wedge')
     m = Mesh(pv_mesh)
     define_boundary_walls(m)
 
@@ -36,12 +36,15 @@ if __name__ == '__main__':
     
     m.set_cell_value(0,p= 0)
     
-    model = FVM(m,density = 1.,viscosity= nu,float_dtype =wp.float64)
+    model = FVM(m,output_variables = ['u','v','p','p_cor'],density = 1.,viscosity= nu,float_dtype =wp.float32)
     model.init_step()
     results = m.pyvista_mesh
     
-    solver = SIMPLE(model,0.7,0.3)
-    solver.run(500,1,rhie_chow = True)
+    IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)
+    IC[:,-1] = 0.
+    model.set_initial_conditions(wp.array(IC))
+    solver = SIMPLE(model,1.,0.3)
+    solver.run(1,1,rhie_chow = True)
 
     from matplotlib import pyplot as plt
 

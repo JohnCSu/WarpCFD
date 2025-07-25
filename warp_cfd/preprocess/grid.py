@@ -5,7 +5,7 @@ import pyvista as pv
 import numpy as np
 
 from .mesh import Mesh
-def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructured_wedge = False,display_mesh = False,save = None) -> pv.UnstructuredGrid:
+def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructured_wedge = False,display_mesh = False,save = None,gmsh_version2 = False) -> pv.UnstructuredGrid:
     '''
     Create a 3D grid with a single element in the z direction to represent a 2D grid in 3D space returns a pyvista Undstructured Grid.
 
@@ -20,7 +20,7 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
     '''
     gmsh.initialize()
 
-    valid_elements = ['wedge','hex']
+    valid_elements = ['wedge','hex','tet']
 
 
     element_id = {
@@ -47,26 +47,51 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
     # Step 1: Create 2D rectangle surface
     rect = gmsh.model.occ.addRectangle(*origin,dx,dy)
     
-    if element_type == 'wedge' and unstructured_wedge:
+    if element_type == 'wedge':
+        if unstructured_wedge:
+            # Split the rectangular surface into triangles
+            # This returns surface tags, which we extrude
+            gmsh.model.occ.fragment([(2, rect)], [])  # Ensures it's ready for face ops
+            gmsh.model.occ.synchronize()
 
-        # Split the rectangular surface into triangles
-        # This returns surface tags, which we extrude
-        gmsh.model.occ.fragment([(2, rect)], [])  # Ensures it's ready for face ops
-        gmsh.model.occ.synchronize()
 
+            # Mesh.CharacteristicLengthMin = 0.01;
+            # Get the two triangle surfaces from the rectangle
+            surfaces = gmsh.model.getEntities(dim=2)
+            gmsh.option.setNumber("Mesh.CharacteristicLengthMax", min(dx/nx,dy/ny))
+            # gmsh.option.setNumber("Mesh.CharacteristicLengthMin", min(dx/nx,dy/ny))
+            gmsh.model.mesh.field.setAsBackgroundMesh(1)
+            # Extrude each triangle into wedges
+            for s in surfaces:
+                gmsh.model.occ.extrude([s], 0, 0, dz, numElements=[1], recombine=True)
 
-        # Mesh.CharacteristicLengthMin = 0.01;
-        # Get the two triangle surfaces from the rectangle
-        surfaces = gmsh.model.getEntities(dim=2)
-        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", min(dx/nx,dy/ny))
-        # gmsh.option.setNumber("Mesh.CharacteristicLengthMin", min(dx/nx,dy/ny))
-        gmsh.model.mesh.field.setAsBackgroundMesh(1)
-        # Extrude each triangle into wedges
-        for s in surfaces:
-            gmsh.model.occ.extrude([s], 0, 0, dz, numElements=[1], recombine=True)
+        else:
+            # Step 2: Synchronize to access entities
+            gmsh.model.occ.synchronize()
 
-        
-    else:
+            # Step 3: Get boundary curves and assign transfinite curves
+            boundary = gmsh.model.getBoundary([(2, rect)], oriented=False)
+            for dim, tag in boundary:
+                start = gmsh.model.getValue(dim, tag, [0.0])
+                end = gmsh.model.getValue(dim, tag, [1.0])
+                dx = end[0] - start[0]
+                dy = end[1] - start[1]
+                if abs(dx) > abs(dy):
+                    gmsh.model.mesh.setTransfiniteCurve(tag, nx + 1)
+                else:
+                    gmsh.model.mesh.setTransfiniteCurve(tag, ny + 1)
+
+            # Step 4: Transfinite + recombine surface
+            gmsh.model.mesh.setTransfiniteSurface(rect)
+            if element_type == 'hex':
+                gmsh.model.mesh.setRecombine(2, rect)
+
+            # Step 5: Extrude the surface to get a hexahedral block
+            # Returns list of new volumes, surfaces, lines, points
+            ext = gmsh.model.occ.extrude([(2, rect)], *[0, 0, dz], 
+                                        numElements=[1], recombine=True)
+            
+    elif element_type == 'hex':
         # Step 2: Synchronize to access entities
         gmsh.model.occ.synchronize()
 
@@ -84,13 +109,25 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
 
         # Step 4: Transfinite + recombine surface
         gmsh.model.mesh.setTransfiniteSurface(rect)
-        if element_type == 'hex':
-            gmsh.model.mesh.setRecombine(2, rect)
+        
+        gmsh.model.mesh.setRecombine(2, rect)
 
         # Step 5: Extrude the surface to get a hexahedral block
         # Returns list of new volumes, surfaces, lines, points
         ext = gmsh.model.occ.extrude([(2, rect)], *[0, 0, dz], 
                                     numElements=[1], recombine=True)
+    elif element_type == 'tet':
+        # Create box geometry of size n x n x 1
+        lc = 1.0  # mesh size
+        gmsh.model.occ.addBox(0, 0, 0, dx, dy, dz)
+        gmsh.model.occ.synchronize()
+
+        # Define transfinite meshing to get structured grid
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", 0.2)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", 0.2)
+
+        # Recombine OFF so mesh will be tetrahedral not hex
+        # gmsh.option.setNumber("Mesh.RecombineAll", 0)
 
     # Generate and write mesh
     
@@ -98,7 +135,10 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
     gmsh.model.mesh.generate(3)
     
     if save is not None:
-        gmsh.write("{save}.msh")
+
+        if gmsh_version2:
+            gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)  # Version 2.2 ASCII
+        gmsh.write(f"{save}.msh")
 
     if display_mesh:
         if "-nopopup" not in sys.argv:

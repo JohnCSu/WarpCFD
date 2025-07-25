@@ -10,12 +10,24 @@ from warp_cfd.FV.utils import bsr_to_coo_array
 from warp_cfd.FV.utils import green_gauss_gradient
 
 class Matrix():
-    def __init__(self,fvm:FVM,fields,solver = linear.bicgstab) -> None:
-        if isinstance(fields,Field):
+    def __init__(self,fvm:FVM,fields:str| list[str],solver = linear.bicgstab) -> None:
+        if isinstance(fields,str):
             fields = [fields]
 
+        need_globals = True
+        for f in fields:
+            if f not in fvm.output_variables:
+                need_globals = False
+
+        if need_globals:
+            self.fields = [fvm.fields[f] for f in fields]
+            self.global_output_indices = wp.array([f.index for f in self.fields],dtype= wp.int32)
+        else:
+            self.fields = [Field(f) for f in fields]
+            self.global_output_indices = None
+
         self.num_outputs =len(fields)
-        self.fields =fields
+        
         self.COO_array = COO_Arrays(fvm.cell_properties.nnz_per_cell,self.num_outputs,fvm.float_dtype,fvm.int_dtype)
         # WE mak A*u = B matrix A. In 3D we have 3
         self.sparse_rows = fvm.num_cells*self.num_outputs
@@ -23,15 +35,12 @@ class Matrix():
 
         self.linear_solver = solver
         self.max_iter = 500
-        self.tol = 1.e-6
+        if fvm.float_dtype == wp.float32:
+            self.tol = 1.e-6
+        elif fvm.float_dtype == wp.float64:
+            self.tol = 1.e-9
 
-        need_globals = True
-        for f in fields:
-            if f.name not in fvm.output_variables:
-                need_globals = False
         
-        
-        self.global_output_indices = wp.array([f.index for f in self.fields],dtype= wp.int32) if need_globals else None
         
         self.rhs = wp.zeros(shape=(self.sparse_rows),dtype=fvm.float_dtype)
 

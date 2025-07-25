@@ -2,28 +2,27 @@ import warp as wp
 from typing import Any
 from warp_cfd.FV.model import FVM
 from warp_cfd.FV.field import Field
-from warp_cfd.FV.Implicit_Schemes.gradient_interpolation import central_difference
+from warp_cfd.FV.Implicit_Schemes.laplacianScheme import central_difference,central_difference_corrected
 from warp_cfd.FV.terms.terms import Term
 
 class DiffusionTerm(Term):
-    def __init__(self,fv:FVM, fields: Field| list[Field],*,interpolation='central difference',custom_interpolation = None,von_neumann = None, dirchlet =None,need_global_index= True):
+    def __init__(self,fv:FVM, fields:str | list[str],*,correction=False,custom_interpolation = None,von_neumann = None, dirchlet =None,need_global_index= True):
         super().__init__(fv,fields,implicit= True,need_global_index = need_global_index)
         #Define interpolation function
-        self.interpolation = interpolation
-        if interpolation == 'central difference':
-            self.interpolation_function = central_difference(fv.float_dtype)
+        
+        if correction:
+            assert need_global_index, 'Fields Must be defined in the FVM model to use corrections'
+            self.interpolation = central_difference_corrected(fv.float_dtype)
         else:
-            assert custom_interpolation is not None, 'if interpolation is not central difference, a wp.func needs to be passed into custom_interpolation'
+            self.interpolation = central_difference(fv.float_dtype)
 
-            self.interpolation_function  = custom_interpolation
+        assert custom_interpolation is None,'Custom laplacian functions not available yet'
 
         # Implicit Diffusion Kernel
-        self._calculate_internal_diffusion_weights_kernel = create_diffusion_scheme(self.interpolation_function,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+        self._calculate_internal_diffusion_weights_kernel = create_diffusion_scheme(self.interpolation,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
 
         # Define the BC kernel
         assert not ((von_neumann is not None) and (dirchlet is not None)), 'von neumann and dirichlet settings cannot both be not None'
-        
-        
         
         if von_neumann is not None:
             assert len(self.fields) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'

@@ -233,9 +233,14 @@ class Mesh():
         faces.distance= np.ones((K,self.dimension),dtype= self.float_dtype)*(-1)
         faces.is_boundary = np.ones((K,),dtype=np.uint8) # (K,) bool 1 if BC 0 otherwise for each face
         faces.boundary_value_is_fixed = np.zeros((K,O),dtype=np.uint8) 
+        
         faces.boundary_value = np.zeros((K,O),dtype= self.float_dtype) # (K, dim+1) dim+1 number of output variables (u,v,w,p)
+
         faces.gradient_value_is_fixed = np.zeros((K,O),dtype=np.uint8)
-        faces.gradient_value_is_fixed[:,3] = 1 # P is output no 3 and we assume by default all is non-slip walls
+        
+        if self.num_outputs >= 4:
+            faces.boundary_value_is_fixed[:,0:3] = 1 # Set Velocity vars to no slip
+            faces.gradient_value_is_fixed[:,3:] = 1 # P is output no 3 and we assume by default all is non-slip walls
 
         faces.gradient_value = np.zeros((K,O),dtype= self.float_dtype) # (K, dim+1) dim+1 number of output variables (u,v,w,p)
         faces.cell_face_index = np.ones((K,2),dtype = self.int_dtype)*(-1)

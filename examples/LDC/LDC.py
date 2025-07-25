@@ -5,20 +5,21 @@ import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array
 from warp_cfd.FV.implicit_Solvers import SIMPLE
 from warp_cfd.preprocess import Mesh
+
+from warp_cfd.preprocess import create_2D_grid,Mesh,define_boundary_walls
 wp.config.mode = "debug"
 wp.init()
 if __name__ == '__main__':
     from grid import create_hex_grid
     # wp.clear_kernel_cache()
-    n = 51
+    np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
+    n = 41
     w,l = 1.,1.
     Re = 100
     G,nu = 1,1/Re
-    m = create_hex_grid(n,n,1,(w/n,l/n,0.1))
-    
-    
-
-
+    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,element_type= 'hex',display_mesh= False,save = 'wedge')
+    m = Mesh(pv_mesh,num_outputs=5)
+    define_boundary_walls(m)
     # IC = np.load(f'benchmark_n{n}.npy')
     m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip
     m.set_boundary_value('-X',u = 0,v = 0,w = 0) # No Slip
@@ -37,80 +38,15 @@ if __name__ == '__main__':
     
     m.set_cell_value(0,p= 0)
     
-    model = FVM(m,density = 1.,viscosity= nu)
+    model = FVM(m,output_variables = ['u','v','w','p','p_cor'],density = 1.,viscosity= nu,float_dtype =wp.float32)
     model.init_step()
     results = m.pyvista_mesh
-    
-    solver = SIMPLE(model)
+    IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)
+    IC[-1,:] = 0.
+    # model.set_initial_conditions(wp.array(IC))
+
+    solver = SIMPLE(model,0.7,0.3)
     solver.run(500,40)
-
-
-
-    # convection = ConvectionTerm(model,model.fields[0:-1],'upwindLinear') # We only want velocities
-    # diffusion = DiffusionTerm(model,model.fields[0:-1])
-    # grad_P = gradTerm(model,model.fields[-1]) # P
-
-    # vel_equation = Matrix(model,fields = model.fields[0:-1])
-
-    # p_correction_diffusion = DiffusionTerm(model,Field('p_cor'),von_neumann= 0., need_global_index= False)
-    # p_corr_equation = Matrix(model,fields = Field('p_cor'))
-
-    # np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
-
-    # vel_correction = wp.zeros(shape=(model.num_cells,3),dtype=float)
-
-    # vel_array = wp.zeros(shape=(model.num_cells*3),dtype=model.float_dtype)
-
-    # # IC = wp.ones(shape = (model.num_cells,3),dtype = wp.float32)
-    # # model.set_initial_conditions(IC)
-
-    # from warp_cfd.FV.utils import bsr_to_coo_array
-    # # model.MAX_STEPS = 500
-    # for i in range(500):
-    #     model.face_interpolation()
-    #     model.calculate_gradients()
-    #     model.calculate_mass_flux(rhie_chow=True)
-
-    #     # intermediate Velocity Step
-    #     convection(model)
-    #     diffusion(model,viscosity = nu)
-    #     grad_P(model)
-    #     vel_equation.form_system([convection,-diffusion],explicit_terms= -grad_P,fvm = model)
-        
-    #     vel_equation.relax(0.7,model)
-    #     ap = vel_equation.diagonal
-    #     outer_loop_result,vel_array = vel_equation.solve_Axb(vel_array)
-        
-    #     model.replace_cell_values([0,1,2],vel_array)
-
-    #     model.pressure_correction_ops.calculate_D_viscosity(model.D_cell,model.D_face,ap,model.cells,model.faces)
-
-    #     model.face_interpolation()
-    #     model.calculate_gradients()
-    #     model.calculate_mass_flux(rhie_chow=True)
-
-    #     # Pressure Correction
-    #     div_u = model.calculate_divergence()
-        
-    #     p_correction_diffusion(model,viscosity = model.D_face)
-
-    #     p_corr_equation.form_system(p_correction_diffusion,fvm = model)
-    #     p_corr_equation.add_RHS(div_u)
-    #     p_corr_equation.replace_row(0,0.)
-
-    #     inner_loop_result,p_cor = p_corr_equation.solve_Axb()
-    #     #Update Pressure
-    #     model.update_cell_values(3,p_cor,scale = 0.3)
-        
-    #     #Update Velocity
-    #     vel_correction = p_corr_equation.calculate_gradient(coeff=model.D_face,fvm = model)
-    #     sub_1D_array(vel_array,vel_correction.flatten(),vel_array)
-    #     model.replace_cell_values([0,1,2],vel_array)
-        
-    #     if model.steps % 40 == 0:
-    #         print(f'step iter: {model.steps}')
-    #         converged = model.check_convergence(vel_equation.matrix,vel_array,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
-    #         # print(vel_result)
 
     # exit()
     from matplotlib import pyplot as plt
@@ -136,8 +72,8 @@ if __name__ == '__main__':
     plt.show()
 
     import pandas as pd
-    v_benchmark = pd.read_csv('v_velocity_results.csv',sep = ',')
-    u_benchmark = pd.read_csv('u_velocity_results.txt',sep= '\t')
+    v_benchmark = pd.read_csv(r'examples\LDC\v_velocity_results.csv',sep = ',')
+    u_benchmark = pd.read_csv(r'examples\LDC\u_velocity_results.txt',sep= '\t')
 
     v_05 = v[y == 0.5]
     print(f'CFD max {v_05.max()}, Benchmark Max :{v_benchmark['100'].max()}')

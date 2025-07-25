@@ -9,14 +9,15 @@ from warp_cfd.FV.Ops.array_ops import sub_1D_array
 class SIMPLE():
     def __init__(self,model:FVM,u_relaxation_factor=0.7,p_relaxation_factor = 0.3) -> None:
         self.model = model
-        self.convection = ConvectionTerm(model,model.fields[0:-1],'upwind') # We only want velocities
-        self.diffusion = DiffusionTerm(model,model.fields[0:-1])
-        self.grad_P = GradTerm(model,model.fields[-1]) # P
+        velocity_vars = ['u','v','w']
+        self.convection = ConvectionTerm(model,velocity_vars,'upwind') # We only want velocities
+        self.diffusion = DiffusionTerm(model,velocity_vars,correction = True)
+        self.grad_P = GradTerm(model,'p') # P
 
-        self.vel_equation = Matrix(model,fields = model.fields[0:-1])
+        self.vel_equation = Matrix(model,fields = velocity_vars)
 
-        self.p_correction_diffusion = DiffusionTerm(model,Field('p_cor'),von_neumann= 0., need_global_index= False)
-        self.p_corr_equation = Matrix(model,fields = Field('p_cor'))
+        self.p_correction_diffusion = DiffusionTerm(model,'p_cor',need_global_index= True,von_neumann= 0.,correction=True)
+        self.p_corr_equation = Matrix(model,fields = 'p_cor')
 
         self.vel_correction = wp.zeros(shape=(model.num_cells,3),dtype=float)
 
@@ -38,6 +39,11 @@ class SIMPLE():
 
         for i in range(num_steps):
             model.face_interpolation()
+            internal_ids = model.face_properties.internal_face_ids.numpy()
+            # print(internal_ids)
+            # print(model.face_values.numpy()[[20,26,25,28],0])
+            # print(model.face_properties.centroid.numpy()[[20,26,25,28]])
+            # print(model.cell_values.numpy())
             model.calculate_gradients()
             model.calculate_mass_flux(rhie_chow=rhie_chow)
 
@@ -52,6 +58,7 @@ class SIMPLE():
             ap = vel_equation.diagonal
             outer_loop_result,vel_array = vel_equation.solve_Axb(vel_array)
             # print(vel_array[::3])
+            
             model.replace_cell_values([0,1,2],vel_array)
 
             model.pressure_correction_ops.calculate_D_viscosity(model.D_cell,model.D_face,ap,model.cells,model.faces)
@@ -72,6 +79,7 @@ class SIMPLE():
             
             inner_loop_result,p_cor = p_corr_equation.solve_Axb()
             #Update Pressure
+        #     model.replace_cell_values(4,p_cor)
             model.update_cell_values(3,p_cor,scale = self.p_relaxation_factor)
             
             #Update Velocity
