@@ -30,7 +30,7 @@ class Mesh():
         self.cellType = (CellType(_celltype).name,_celltype)
         self.cells = np.array(pyvista_mesh.cells_dict[self.cellType[1]],dtype=self.int_dtype) 
         self.cell_centroids = np.array(pyvista_mesh.cell_centers().points,dtype=self.float_dtype)
-        self.cell_volumes = np.array(pyvista_mesh.compute_cell_sizes()['Volume'],dtype=self.float_dtype)
+        self.cell_volumes = np.array(pyvista_mesh.compute_cell_sizes()['Volume'],dtype=self.float_dtype).__abs__()
         self.groups:dict[str,group] = {}
         
         self.num_outputs = num_outputs
