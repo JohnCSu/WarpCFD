@@ -1,4 +1,4 @@
-from warp_cfd.FV.Ops.interpolation import central_difference,upwind
+from warp_cfd.FV.interpolation_Schemes.interpolation import central_difference,upwind
 import warp as wp
 from typing import Any
 from .ops_class import Ops
@@ -259,3 +259,24 @@ class Mesh_Ops(Ops):
 
         return arr
     
+    def integrate_HbyA(self,field_arr,cells,faces,out = None | wp.array):
+        if out is None:
+            out = wp.zeros(shape = self.num_cells,dtype=self.float_dtype)
+        else:
+            out.zero_()
+
+
+
+# @wp.kernel
+# def integrate_divergence(arr:wp.array(dtype=float),cell_structs:wp.array(dtype=Any),face_structs:wp.array(dtype=Any),div_u:wp.array(dtype=float)):
+#     i,j = wp.tid() # C,F
+#             # calculate divergence
+
+    
+#     face_id = cell_structs[i].faces[j]
+
+#     if cell_structs[i].face_sides[j] == 0: # Means cell is the Owner side of face
+#         wp.atomic_add(div_u,i,arr*face_structs[face_id].area)
+#     else: # means is neighbor side of face so set to -ve
+#         wp.atomic_add(div_u,i,arr*face_structs[face_id].area)
+
