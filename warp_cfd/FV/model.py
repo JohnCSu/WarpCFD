@@ -10,11 +10,9 @@ from warp_cfd.FV.Ops.array_ops import add_1D_array,sub_1D_array,inv_1D_array,to_
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.cells as Cells
 from warp_cfd.FV.Weights import create_weight_struct
-from warp_cfd.FV.Ops import Mesh_Ops,Weights_Ops,Matrix_Ops,Pressure_correction_Ops 
+from warp_cfd.FV.Ops import Mesh_Ops,Weights_Ops,Matrix_Ops
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
-from warp_cfd.FV.deprecated.intermediate_velocity import intermediate_velocity_step
-from warp_cfd.FV.deprecated.pressure_correction import pressure_correction_step
 from warp_cfd.FV.field import Field
 
 from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation
@@ -111,7 +109,7 @@ class FVM():
         self.mesh_ops = Mesh_Ops(*Ops_args)
         self.weight_ops = Weights_Ops(*Ops_args) 
         self.matrix_ops = Matrix_Ops(*Ops_args)
-        self.pressure_correction_ops = Pressure_correction_Ops(*Ops_args)
+        
     
     def init_step(self):
         Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
@@ -120,8 +118,7 @@ class FVM():
         self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
         self.mesh_ops.init()
         self.weight_ops.init()
-        self.matrix_ops.init()
-        self.pressure_correction_ops.init()        
+        self.matrix_ops.init()        
         self.init_global_arrays()
     
     def set_initial_conditions(self,IC):
@@ -139,8 +136,6 @@ class FVM():
         self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.mesh_ops.vector_type)
         self.face_values = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
         self.face_gradients = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
-        self.D_face = wp.zeros(shape = (self.num_faces),dtype=self.float_dtype)
-        self.D_cell = wp.zeros(shape = self.num_cells,dtype = self.float_dtype)
         self.mass_fluxes = wp.zeros(shape = (self.num_faces),dtype= self.float_dtype)
     
         self.update_cell_values_kernel = update_cell_values(self.float_dtype)
@@ -180,9 +175,10 @@ class FVM():
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.vel_indices)
 
-    def calculate_mass_flux(self,rhie_chow = True):
+    def calculate_mass_flux(self,rhie_chow = True,rUA = None ):
         if rhie_chow:
-            self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,self.D_face,self.cells,self.faces,self.vel_indices)
+            assert isinstance(rUA,wp.array),'Rhie chow, rUA must be passed in'
+            self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,rUA,self.cells,self.faces,self.vel_indices)
         else:
             self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
        
