@@ -40,6 +40,7 @@ class Matrix():
         elif fvm.float_dtype == wp.float64:
             self.tol = 1.e-9
 
+        self.initial = True
         
         
         self.rhs = wp.zeros(shape=(self.sparse_rows),dtype=fvm.float_dtype)
