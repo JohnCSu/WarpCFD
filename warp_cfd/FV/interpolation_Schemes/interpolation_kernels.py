@@ -5,7 +5,7 @@ from .skewness_functions import skew_correction
 def internal_calculate_face_interpolation_kernel(interpolation_function,cell_struct,face_struct,skew_corrected,float_dtype):
     @wp.kernel
     def _internal_calculate_face_interpolation_kernel(cell_values:wp.array2d(dtype = float_dtype),
-                                                        cell_gradients:wp.array2d(dtype = float_dtype),
+                                                        cell_gradients:wp.array2d(dtype = Any),
                                                         mass_fluxes:wp.array(dtype = float_dtype),
                                                         face_values:wp.array2d(dtype=float_dtype),
                                                         face_structs:wp.array(dtype=face_struct),

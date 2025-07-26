@@ -1,4 +1,4 @@
-from warp_cfd.FV.interpolation_Schemes.interpolation import central_difference,upwind
+from warp_cfd.FV.interpolation_Schemes import linear_interpolation,upwind
 import warp as wp
 from typing import Any
 from .ops_class import Ops
@@ -53,30 +53,30 @@ class Mesh_Ops(Ops):
             if cell_struct[i].value_is_fixed[output]:
                 cell_values[i,output] = fixed_value[i][output]
             
-        @wp.kernel
-        def _internal_calculate_face_interpolation_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
-                                                          cell_values:wp.array2d(dtype = self.float_dtype),
-                                                          face_values:wp.array2d(dtype=self.float_dtype),
-                                                          face_structs:wp.array(dtype=self.face_struct),
-                                          cell_structs:wp.array(dtype = self.cell_struct),
-                                          internal_face_ids:wp.array(dtype= self.face_properties.internal_face_ids.dtype),
-                                          output_indices:wp.array(dtype=self.int_dtype),
-                                          interpolation_method:int):
+        # @wp.kernel
+        # def _internal_calculate_face_interpolation_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
+        #                                                   cell_values:wp.array2d(dtype = self.float_dtype),
+        #                                                   face_values:wp.array2d(dtype=self.float_dtype),
+        #                                                   face_structs:wp.array(dtype=self.face_struct),
+        #                                   cell_structs:wp.array(dtype = self.cell_struct),
+        #                                   internal_face_ids:wp.array(dtype= self.face_properties.internal_face_ids.dtype),
+        #                                   output_indices:wp.array(dtype=self.int_dtype),
+        #                                   interpolation_method:int):
             
-            '''
-            We assume internal faces cannot have boundary conditions applied to them
-            '''
-            i,output_idx = wp.tid() # Loop through internal faces only
-            output = output_indices[output_idx]
-            face_id = internal_face_ids[i]
-            adjacent_cell_ids = face_structs[face_id].adjacent_cells
-            owner_cell = cell_structs[adjacent_cell_ids[0]]
-            neighbor_cell = cell_structs[adjacent_cell_ids[1]] 
+        #     '''
+        #     We assume internal faces cannot have boundary conditions applied to them
+        #     '''
+        #     i,output_idx = wp.tid() # Loop through internal faces only
+        #     output = output_indices[output_idx]
+        #     face_id = internal_face_ids[i]
+        #     adjacent_cell_ids = face_structs[face_id].adjacent_cells
+        #     owner_cell = cell_structs[adjacent_cell_ids[0]]
+        #     neighbor_cell = cell_structs[adjacent_cell_ids[1]] 
 
-            if interpolation_method == 0: # Central Difference
-                face_values[face_id,output] = central_difference(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
-            elif interpolation_method == 1: # Upwind
-                face_values[face_id,output] = upwind(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
+        #     if interpolation_method == 0: # Central Difference
+        #         face_values[face_id,output] = central_difference(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
+        #     elif interpolation_method == 1: # Upwind
+        #         face_values[face_id,output] = upwind(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
 
         
         @wp.kernel
@@ -189,7 +189,7 @@ class Mesh_Ops(Ops):
         self._apply_cell_value = _apply_cell_value_kernel
         self._set_initial_conditions = _set_initial_conditions_kernel
 
-        self._internal_calculate_face_interpolation = _internal_calculate_face_interpolation_kernel
+        # self._internal_calculate_face_interpolation = _internal_calculate_face_interpolation_kernel
         self._boundary_calculate_face_interpolation = _boundary_calculate_face_interpolation_kernel
         self._calculate_mass_flux = _calculate_mass_flux_kernel 
         self._calculate_gradients = _calculate_gradients_kernel

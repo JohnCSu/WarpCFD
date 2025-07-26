@@ -17,7 +17,7 @@ from warp_cfd.FV.deprecated.intermediate_velocity import intermediate_velocity_s
 from warp_cfd.FV.deprecated.pressure_correction import pressure_correction_step
 from warp_cfd.FV.field import Field
 
-
+from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation
 
 # wp.config.verify_fp = True
 '''
@@ -67,7 +67,7 @@ class FVM():
         assert mesh.num_outputs == len(output_variables), 'Number of defined output variables must match number of outputs given in mesh'
         self.settings = CFD_settings()
         self.Convergence = Convergence()
-
+        self.skew_correction = True
         self.face_properties = mesh.face_properties.to_NVD_warp(self.float_dtype)
         self.cell_properties = mesh.cell_properties.to_NVD_warp(self.float_dtype)
         self.node_properties = to_vector_array(mesh.nodes,self.float_dtype) 
@@ -115,6 +115,9 @@ class FVM():
     
     def init_step(self):
         Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
+
+        self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
+        self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
         self.mesh_ops.init()
         self.weight_ops.init()
         self.matrix_ops.init()
@@ -123,6 +126,7 @@ class FVM():
     
     def set_initial_conditions(self,IC):
         self.mesh_ops.set_initial_conditions(IC,self.cell_values)
+
 
     def init_global_arrays(self):
         self.massflux_array = wp.empty(shape = (self.num_cells,self.faces_per_cell))
@@ -159,9 +163,18 @@ class FVM():
     def face_interpolation(self):
          # Use it to store stuff
         self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
-        # self.mesh_ops.apply_cell_value(self.cells)
-        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.p_index,interpolation_method=0)
-        self.mesh_ops.calculate_face_interpolation(self.mass_fluxes,self.cell_values,self.face_values,self.face_gradients,self.cells,self.faces,self.vel_indices,interpolation_method=0)
+        output_indices = self.output_indices
+        wp.launch(kernel = self.internal_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,
+                                                                                                                                                        self.cell_gradients,
+                                                                                                                                                        self.mass_fluxes,
+                                                                                                                                                        self.face_values,
+                                                                                                                                                        self.faces,
+                                                                                                                                                        self.cells,
+                                                                                                                                                        self.face_properties.internal_face_ids,
+                                                                                                                                                        output_indices])
+        wp.launch(kernel = self.boundary_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,self.face_values,self.face_gradients,self.faces,self.cells,self.face_properties.boundary_face_ids,output_indices])
+    
+
     def calculate_gradients(self):
         self.cell_gradients.zero_()
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
@@ -283,7 +296,3 @@ def update_cell_values_multi(float_dtype):
 
         wp.atomic_add(cell_values,i,output_idx[o],scale*value)
     return _update_cell_values_multi
-
-
-# wp.overload(update_cell_values,[int,wp.float64,wp.float64,wp.array(dtype=wp.float64),wp.array2d(dtype=wp.float64)])
-# wp.overload(update_cell_values_multi,[int,wp.float64,wp.float64,wp.array2d(dtype=wp.float64),wp.array2d(dtype=wp.float64)])
