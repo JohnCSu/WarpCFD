@@ -4,3 +4,5 @@
 OtherCFD/*
 *__pycache__*
 *.msh
+*.vtk
+*.geo
