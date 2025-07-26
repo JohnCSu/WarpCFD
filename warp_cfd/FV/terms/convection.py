@@ -4,7 +4,7 @@ from warp_cfd.FV.model import FVM
 from warp_cfd.FV.field import Field
 from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.implicit_Schemes.convectionScheme import central_difference,upwind,upwindLinear
-
+from warp_cfd.FV.interpolation_Schemes import skew_correction
 class ConvectionTerm(Term):
     def __init__(self,fv:FVM, field: Field| list[Field],interpolation='upwind',custom_interpolation = None):
         super().__init__(fv,field,True,True)
@@ -15,7 +15,7 @@ class ConvectionTerm(Term):
             'upwindLinear':upwindLinear(fv.float_dtype), 
             'custom':None # To keep assertion check easy
         }
-
+        self.correct_face_interpolation = True
         self.interpolation = interpolation
         
         assert interpolation in self.interpolation_functions.keys(), 'interpolation schems supported: upwind, central difference, upwindLinear or custom'
@@ -24,7 +24,7 @@ class ConvectionTerm(Term):
             self.interpolation_functions['custom'] = custom_interpolation
             
         self.interpolation_function = self.interpolation_functions[interpolation]
-        self._calculate_convection_weights_kernel = create_convection_scheme(self.interpolation_function,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
+        self._calculate_convection_weights_kernel = create_convection_scheme(self.interpolation_function,fv.cell_struct,fv.face_struct,self.correct_face_interpolation,self.float_dtype,self.int_dtype)
 
 
 
@@ -40,7 +40,7 @@ class ConvectionTerm(Term):
 
 
 
-def create_convection_scheme(interpolation_function,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
+def create_convection_scheme(interpolation_function,cell_struct,face_struct,correct_face_interp,float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.kernel
     def convection_weights_kernel(cell_values:wp.array2d(dtype = float_dtype),
                                                 cell_gradients:wp.array2d(dtype = Any),
@@ -73,7 +73,9 @@ def create_convection_scheme(interpolation_function,cell_struct,face_struct,floa
             neighbor_cell = cell_structs[neighbor_cell_id]
             
             field_weighting = wp.static(interpolation_function)(cell_values,cell_gradients,mass_fluxes,owner_cell,neighbor_cell,face,global_var_idx)
-
+            if wp.static(correct_face_interp):
+                skew = skew_correction(cell_values,cell_gradients,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
+                field_weighting[2]+= skew
             # #Owner, Neighbor , Explicit
             weights[owner_cell_id,face_indices[0],output,0] = field_weighting[0]*mass_fluxes[face_id]
             weights[owner_cell_id,face_indices[0],output,1] = field_weighting[1]*mass_fluxes[face_id]
@@ -84,4 +86,6 @@ def create_convection_scheme(interpolation_function,cell_struct,face_struct,floa
             weights[neighbor_cell_id,face_indices[1],output,0] = field_weighting[1]*mass_flux
             weights[neighbor_cell_id,face_indices[1],output,1] = field_weighting[0]*mass_flux
             weights[neighbor_cell_id,face_indices[1],output,2]= field_weighting[2]*mass_flux
+
+                   
     return convection_weights_kernel
