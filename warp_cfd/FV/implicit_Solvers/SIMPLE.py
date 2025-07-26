@@ -5,10 +5,12 @@ from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Matrix
 from warp_cfd.FV.field import Field
 import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array,add_1D_array,div_1D_array
-
+from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA
 class SIMPLE():
     def __init__(self,model:FVM,u_relaxation_factor=0.7,p_relaxation_factor = 0.3,correction = False) -> None:
         self.model = model
+
+        self.float_dtype = model.float_dtype
         velocity_vars = ['u','v','w']
         self.convection = ConvectionTerm(model,velocity_vars,'upwind') # We only want velocities
         self.diffusion = DiffusionTerm(model,velocity_vars,correction = correction)
@@ -29,6 +31,8 @@ class SIMPLE():
 
         self.HbyA = wp.zeros_like(self.vel_array)
         self.grad_P_HbyA = wp.zeros_like(self.vel_array)
+        self.rUA = wp.zeros(shape= model.cells.shape[0],dtype= model.float_dtype)
+        self.rUA_faces = wp.zeros(shape= model.faces.shape[0],dtype= model.float_dtype)
 
     def run(self,num_steps,steps_per_check = 10,*,rhie_chow = True):
         model = self.model
@@ -40,6 +44,8 @@ class SIMPLE():
         p_corr_equation = self.p_corr_equation
         vel_array = self.vel_array
         HbyA = self.HbyA
+        rUA = self.rUA 
+        rUA_faces = self.rUA_faces
         for i in range(num_steps):
             model.face_interpolation()
             
@@ -61,11 +67,16 @@ class SIMPLE():
             
             
             model.replace_cell_values([0,1,2],vel_array)
+            
 
-            model.pressure_correction_ops.calculate_D_viscosity(model.D_cell,model.D_face,Ap,model.cells,model.faces)
+            rUA = calculate_rUA(Ap,model.cells,rUA)
+            rUA_faces = interpolate_cell_value_to_face(rUA_faces,rUA,model.faces)
 
-            grad_P_HbyA = div_1D_array(grad_P.weights,Ap,grad_P_HbyA)
-            HbyA = add_1D_array(vel_array,grad_P_HbyA,HbyA)
+
+            # model.pressure_correction_ops.calculate_D_viscosity(model.D_cell,model.D_face,Ap,model.cells,model.faces)
+
+            # grad_P_HbyA = div_1D_array(grad_P.weights,Ap,grad_P_HbyA)
+            # HbyA = add_1D_array(vel_array,grad_P_HbyA,HbyA)
             # Interpolate HbyA to Faces and get mass flux
             # Add to RHS
 
@@ -77,7 +88,7 @@ class SIMPLE():
                 # Pressure Correction
                 div_u = model.calculate_divergence()
                 
-                p_correction_diffusion(model,viscosity = model.D_face)
+                p_correction_diffusion(model,viscosity = rUA_faces)
 
                 p_corr_equation.form_system(p_correction_diffusion,fvm = model)
                 p_corr_equation.add_RHS(div_u)
@@ -91,7 +102,7 @@ class SIMPLE():
                 model.update_cell_values(3,p_cor,scale = self.p_relaxation_factor)
                 # print(model.cell_values.numpy()[:,3])
                 #Update Velocity
-                vel_correction = p_corr_equation.calculate_gradient(coeff=model.D_face,fvm = model)
+                vel_correction = p_corr_equation.calculate_gradient(coeff=rUA_faces,fvm = model)
                 sub_1D_array(vel_array,vel_correction.flatten(),vel_array)
                 model.replace_cell_values([0,1,2],vel_array)
             
