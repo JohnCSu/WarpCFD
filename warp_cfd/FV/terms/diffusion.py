@@ -2,7 +2,7 @@ import warp as wp
 from typing import Any
 from warp_cfd.FV.model import FVM
 from warp_cfd.FV.field import Field
-from warp_cfd.FV.Implicit_Schemes.laplacianScheme import central_difference,central_difference_corrected
+from warp_cfd.FV.implicit_Schemes.laplacianScheme import central_difference,central_difference_corrected
 from warp_cfd.FV.terms.terms import Term
 
 class DiffusionTerm(Term):
@@ -10,6 +10,8 @@ class DiffusionTerm(Term):
         super().__init__(fv,fields,implicit= True,need_global_index = need_global_index)
         #Define interpolation function
         
+        '''Flag to overwrite'''
+
         if correction:
             assert need_global_index, 'Fields Must be defined in the FVM model to use corrections'
             self.interpolation = central_difference_corrected(fv.float_dtype)
@@ -36,6 +38,8 @@ class DiffusionTerm(Term):
 
     
     def calculate_weights(self,fv:FVM,viscosity:float | wp.array,**kwargs):
+
+ 
         if isinstance(viscosity,float):
             viscosity = wp.array([viscosity],dtype = fv.float_dtype)
 
