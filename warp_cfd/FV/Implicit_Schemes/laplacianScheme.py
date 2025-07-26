@@ -53,7 +53,7 @@ def central_difference_corrected(float_dtype):
         n1 = d*(float_dtype(1.)/wp.dot(n_f,d))
         n1_mag = wp.length(n1)
         #Orthogonal
-        n2 = n1-n_f
+        n2 = n_f-n1
 
         weight_vec = wp.vector(length=3,dtype=float_dtype)
         #Owner Weight
