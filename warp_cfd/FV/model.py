@@ -175,10 +175,10 @@ class FVM():
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.vel_indices)
 
-    def calculate_mass_flux(self,rhie_chow = True,rUA = None ):
+    def calculate_mass_flux(self,rhie_chow = True,rUA_faces = None ):
         if rhie_chow:
-            assert isinstance(rUA,wp.array),'Rhie chow, rUA must be passed in'
-            self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,rUA,self.cells,self.faces,self.vel_indices)
+            assert isinstance(rUA_faces,wp.array),'For Rhie chow, rUA interpolated to faces must be passed in'
+            self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,rUA_faces,self.cells,self.faces,self.vel_indices)
         else:
             self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
        

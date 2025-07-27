@@ -50,7 +50,7 @@ class SIMPLE():
             model.face_interpolation()
             
             model.calculate_gradients()
-            model.calculate_mass_flux(rhie_chow=rhie_chow)
+            model.calculate_mass_flux(rhie_chow=rhie_chow,rUA_faces = rUA_faces)
 
             # intermediate Velocity Step
             convection(model)
@@ -83,7 +83,7 @@ class SIMPLE():
             for _ in range(self.NUM_INNER_LOOPS):
                 model.face_interpolation()
                 model.calculate_gradients()
-                model.calculate_mass_flux(rhie_chow=rhie_chow)
+                model.calculate_mass_flux(rhie_chow=rhie_chow,rUA_faces = rUA_faces)
 
                 # Pressure Correction
                 div_u = model.calculate_divergence()
