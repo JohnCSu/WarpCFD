@@ -5,18 +5,18 @@ from pyvista import CellType
 from warp.types import vector
 from warp import sparse
 
-from warp_cfd.FV.Ops.array_ops import add_1D_array,sub_1D_array,inv_1D_array,to_vector_array,mult_scalar_1D_array,absolute_1D_array,power_scalar_1D_array,sum_1D_array,L_norm_1D_array
+from warp_cfd.FV.Ops.array_ops import add_1D_array,sub_1D_array,inv_1D_array,to_vector_array,mult_scalar_1D_array,mult_1D_array
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.cells as Cells
 from warp_cfd.FV.Weights import create_weight_struct
-from warp_cfd.FV.Ops import Mesh_Ops,Weights_Ops,Matrix_Ops
+from warp_cfd.FV.Ops import Mesh_Ops,Matrix_Ops
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.utils import COO_Arrays
 from warp_cfd.FV.field import Field
-
-from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation
-
+from warp_cfd.FV.Ops.mesh_ops import get_gradient_kernel    
+from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation,upwind
+from typing import Any
 # wp.config.verify_fp = True
 '''
 TODO:
@@ -107,7 +107,6 @@ class FVM():
         Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.weight_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
 
         self.mesh_ops = Mesh_Ops(*Ops_args)
-        self.weight_ops = Weights_Ops(*Ops_args) 
         self.matrix_ops = Matrix_Ops(*Ops_args)
         
     
@@ -116,8 +115,8 @@ class FVM():
 
         self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
         self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
+        self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype) 
         self.mesh_ops.init()
-        self.weight_ops.init()
         self.matrix_ops.init()        
         self.init_global_arrays()
     
@@ -140,6 +139,7 @@ class FVM():
     
         self.update_cell_values_kernel = update_cell_values(self.float_dtype)
         self.update_cell_values_multi_kernel = update_cell_values_multi(self.float_dtype)
+    
     def struct_member_to_array(self,member = 'mass_fluxes',struct = 'cells'):
         if struct == 'cells':
             struct_ = self.cell_struct
@@ -167,6 +167,27 @@ class FVM():
                                                                                                                                                         self.cells,
                                                                                                                                                         self.face_properties.internal_face_ids,
                                                                                                                                                         output_indices])
+        
+        # wp.launch(kernel = self.internal_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],self.p_index.shape[0]), inputs = [self.cell_values,
+        #                                                                                                                                                 self.cell_gradients,
+        #                                                                                                                                                 self.mass_fluxes,
+        #                                                                                                                                                 self.face_values,
+        #                                                                                                                                                 self.faces,
+        #                                                                                                                                                 self.cells,
+        #                                                                                                                                                 self.face_properties.internal_face_ids,
+        #                                                                                                                                                 self.p_index])
+        
+        
+        # wp.launch(kernel = self.internal_face_interpolation_upwind, dim = (self.face_properties.internal_face_ids.shape[0],self.vel_indices.shape[0]), inputs = [self.cell_values,
+        #                                                                                                                                                 self.cell_gradients,
+        #                                                                                                                                                 self.mass_fluxes,
+        #                                                                                                                                                 self.face_values,
+        #                                                                                                                                                 self.faces,
+        #                                                                                                                                                 self.cells,
+        #                                                                                                                                                 self.face_properties.internal_face_ids,
+        #                                                                                                                                                 self.vel_indices])
+        
+        
         wp.launch(kernel = self.boundary_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,self.face_values,self.face_gradients,self.faces,self.cells,self.face_properties.boundary_face_ids,output_indices])
     
 
@@ -174,6 +195,19 @@ class FVM():
         self.cell_gradients.zero_()
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.vel_indices)
+
+    
+    def get_gradient(self,global_output_idx,coeff = 1.):
+        '''Return a copy of the gradient of a specific output. Returnms a 2D array'''
+        gradient_array = wp.array2d(shape = (self.num_cells,3),dtype = self.float_dtype)
+        if isinstance(coeff,float):
+            coeff = wp.array([coeff],dtype= self.float_dtype)
+        wp.launch(get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,global_output_idx] )
+        
+        return gradient_array
+    
+    def relax(self,new_value,alpha,output_index):
+        wp.launch(explicit_relax,dim = self.num_cells, inputs = [self.cell_values,new_value,alpha,output_index])
 
     def calculate_mass_flux(self,rhie_chow = True,rUA_faces = None ):
         if rhie_chow:
@@ -292,3 +326,10 @@ def update_cell_values_multi(float_dtype):
 
         wp.atomic_add(cell_values,i,output_idx[o],scale*value)
     return _update_cell_values_multi
+
+
+@wp.kernel
+def explicit_relax(cell_values:wp.array2d(dtype=Any),new_value:wp.array(dtype=Any),alpha:float,global_output_index:int):
+    i = wp.tid()
+    cell_values[i,global_output_index] = alpha*new_value[i] + (1.-alpha)*cell_values[i,global_output_index] 
+
