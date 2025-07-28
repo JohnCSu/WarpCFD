@@ -154,11 +154,30 @@ class FVM():
 
         member_arr = [a[index] for a in arr]
         return np.array(member_arr)
+    
 
-    def face_interpolation(self):
-         # Use it to store stuff
+    def get_output_indices(self,output_indices: list[int] | wp.array[int] | Field | None):
+        if output_indices is None:
+            return self.output_indices  
+        
+                
+        if isinstance(output_indices,(int)):
+            output_indices = [output_indices]
+        elif isinstance(output_indices,str):
+            assert output_indices in self.output_variables, 'output indices type str was not found in model\'s list of output variables'
+            output_indices = [self.fields[output_indices].index]
+        elif isinstance(output_indices,(list,tuple)) and all(isinstance(o,str) for o in output_indices):
+            output_indices = [self.fields[output].index for output in output_indices]
+
+        return wp.array(output_indices,dtype = wp.int32)
+            
+    def set_boundary_conditions(self):
         self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
-        output_indices = self.output_indices
+
+    def face_interpolation(self,output_indices: None | list | wp.array = None):
+         # Use it to store stuff
+        output_indices = self.get_output_indices(output_indices)
+        
         wp.launch(kernel = self.internal_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,
                                                                                                                                                         self.cell_gradients,
                                                                                                                                                         self.mass_fluxes,
@@ -167,34 +186,14 @@ class FVM():
                                                                                                                                                         self.cells,
                                                                                                                                                         self.face_properties.internal_face_ids,
                                                                                                                                                         output_indices])
-        
-        # wp.launch(kernel = self.internal_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],self.p_index.shape[0]), inputs = [self.cell_values,
-        #                                                                                                                                                 self.cell_gradients,
-        #                                                                                                                                                 self.mass_fluxes,
-        #                                                                                                                                                 self.face_values,
-        #                                                                                                                                                 self.faces,
-        #                                                                                                                                                 self.cells,
-        #                                                                                                                                                 self.face_properties.internal_face_ids,
-        #                                                                                                                                                 self.p_index])
-        
-        
-        # wp.launch(kernel = self.internal_face_interpolation_upwind, dim = (self.face_properties.internal_face_ids.shape[0],self.vel_indices.shape[0]), inputs = [self.cell_values,
-        #                                                                                                                                                 self.cell_gradients,
-        #                                                                                                                                                 self.mass_fluxes,
-        #                                                                                                                                                 self.face_values,
-        #                                                                                                                                                 self.faces,
-        #                                                                                                                                                 self.cells,
-        #                                                                                                                                                 self.face_properties.internal_face_ids,
-        #                                                                                                                                                 self.vel_indices])
-        
-        
         wp.launch(kernel = self.boundary_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,self.face_values,self.face_gradients,self.faces,self.cells,self.face_properties.boundary_face_ids,output_indices])
     
 
-    def calculate_gradients(self):
+    def calculate_gradients(self,output_indices: None | list | wp.array = None):
+        output_indices = self.get_output_indices(output_indices)        
         self.cell_gradients.zero_()
-        self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.p_index)
-        self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,self.vel_indices)
+        self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,output_indices)
+
 
     
     def get_gradient(self,global_output_idx,coeff = 1.):
