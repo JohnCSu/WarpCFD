@@ -156,7 +156,7 @@ class FVM():
         return np.array(member_arr)
     
 
-    def get_output_indices(self,output_indices: list[int] | wp.array[int] | Field | None):
+    def get_output_indices(self,output_indices: tuple[int|str] |list[int|str] | wp.array[int] | str | int | None):
         if output_indices is None:
             return self.output_indices  
         
@@ -175,7 +175,9 @@ class FVM():
         self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
 
     def face_interpolation(self,output_indices: None | list | wp.array = None):
-         # Use it to store stuff
+        '''
+        Interpolate values to boundary (if von neumann) and internal faces. If output_indices is None, All variables defined in model are interpolated
+        '''
         output_indices = self.get_output_indices(output_indices)
         
         wp.launch(kernel = self.internal_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,
@@ -190,30 +192,43 @@ class FVM():
     
 
     def calculate_gradients(self,output_indices: None | list | wp.array = None):
+        '''
+        Calculate Cell Centered gradient. If output_indices is None, All variables defined in model are interpolated. See self.get_output_indices for the type of valid inputs
+        '''
         output_indices = self.get_output_indices(output_indices)        
         self.cell_gradients.zero_()
         self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,output_indices)
 
 
     
-    def get_gradient(self,global_output_idx,coeff = 1.):
-        '''Return a copy of the gradient of a specific output. Returnms a 2D array'''
+    def get_gradient(self,output_index: str | int,coeff = 1.):
+        '''Return a copy of the gradient of a specific output. Returns a 2D array'''
+        
+        assert isinstance(output_index,(str,int)), 'output_index can only be int or str'
+        if isinstance(output_index,str):
+            output_index = self.fields[output_index].index
+
         gradient_array = wp.array2d(shape = (self.num_cells,3),dtype = self.float_dtype)
         if isinstance(coeff,float):
             coeff = wp.array([coeff],dtype= self.float_dtype)
-        wp.launch(get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,global_output_idx] )
+        wp.launch(get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,output_index] )
         
         return gradient_array
     
     def relax(self,new_value,alpha,output_index):
+        
+        assert isinstance(output_index,(str,int)), 'output_index can only be int or str'
+        if isinstance(output_index,str):
+            output_index = self.fields[output_index].index
+
         wp.launch(explicit_relax,dim = self.num_cells, inputs = [self.cell_values,new_value,alpha,output_index])
 
-    def calculate_mass_flux(self,rhie_chow = True,rUA_faces = None ):
-        if rhie_chow:
-            assert isinstance(rUA_faces,wp.array),'For Rhie chow, rUA interpolated to faces must be passed in'
-            self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,rUA_faces,self.cells,self.faces,self.vel_indices)
-        else:
-            self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
+    def calculate_mass_flux(self):
+        # if rhie_chow:
+        #     assert isinstance(rUA_faces,wp.array),'For Rhie chow, rUA interpolated to faces must be passed in'
+        #     self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,rUA_faces,self.cells,self.faces,self.vel_indices)
+        # else:
+        self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
        
 
     def calculate_divergence(self,arr = None):
@@ -262,17 +277,14 @@ class FVM():
         return self.Convergence.has_converged()
     
 
-    def replace_cell_values(self,field_idx:int | list | tuple |wp.array,value:float | wp.array):
+    def replace_cell_values(self,output_indices:int | list | tuple |wp.array,value:float | wp.array):
         '''
         Completely Override the values stored in the cell values array. To add to the cell values, see `update_cell_values()` method instead
         '''
-
-        if isinstance(field_idx,int):
-            field_idx = [field_idx]
+        output_indices = self.get_output_indices(output_indices)
         # if isinstance(field_idx,(list,tuple,wp.array)):
-        field_idx = wp.array(field_idx,dtype=wp.int32)
-
-        self.matrix_ops.fill_outputs_from_matrix_vector(self.cell_values,value,field_idx)
+        assert output_indices.shape[0]*self.num_cells == value.shape[0]
+        self.matrix_ops.fill_outputs_from_matrix_vector(self.cell_values,value,output_indices)
 
 
     def update_cell_values(self,field_idx:int | list | tuple |wp.array,value:float | wp.array,scale : float = 1.):
