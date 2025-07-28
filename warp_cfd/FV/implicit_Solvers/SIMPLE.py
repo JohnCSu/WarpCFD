@@ -5,7 +5,8 @@ from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Matrix
 from warp_cfd.FV.field import Field
 import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array,add_1D_array,div_1D_array
-from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA
+from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA,get_HbyA,divFlux
+from warp.types import vector
 class SIMPLE():
     def __init__(self,model:FVM,u_relaxation_factor=0.7,p_relaxation_factor = 0.3,correction = False) -> None:
         self.model = model
@@ -27,13 +28,13 @@ class SIMPLE():
 
         self.p_relaxation_factor = p_relaxation_factor
         self.u_relaxation_factor = u_relaxation_factor
-        self.NUM_INNER_LOOPS = 3
+        self.NUM_INNER_LOOPS = 1
 
         self.HbyA = wp.zeros_like(self.vel_array)
         self.grad_P_HbyA = wp.zeros_like(self.vel_array)
         self.rUA = wp.zeros(shape= model.cells.shape[0],dtype= model.float_dtype)
         self.rUA_faces = wp.zeros(shape= model.faces.shape[0],dtype= model.float_dtype)
-
+        self.HbyA_faces = wp.zeros(shape=model.faces.shape[0],dtype = vector(3,dtype=model.float_dtype))
     def run(self,num_steps,steps_per_check = 10,*,rhie_chow = True):
         model = self.model
         convection = self.convection
@@ -50,7 +51,7 @@ class SIMPLE():
             model.face_interpolation()
             
             model.calculate_gradients()
-            model.calculate_mass_flux(rhie_chow=rhie_chow,rUA_faces = rUA_faces)
+            model.calculate_mass_flux(rhie_chow=False,rUA_faces = rUA_faces)
 
             # intermediate Velocity Step
             convection(model)
@@ -66,24 +67,23 @@ class SIMPLE():
             # print(vel_array[::3])
             
             
-            model.replace_cell_values([0,1,2],vel_array)
+            # model.replace_cell_values([0,1,2],vel_array)
             
 
             rUA = calculate_rUA(Ap,model.cells,rUA)
             rUA_faces = interpolate_cell_value_to_face(rUA_faces,rUA,model.faces)
 
 
-            # model.pressure_correction_ops.calculate_D_viscosity(model.D_cell,model.D_face,Ap,model.cells,model.faces)
-
-            # grad_P_HbyA = div_1D_array(grad_P.weights,Ap,grad_P_HbyA)
-            # HbyA = add_1D_array(vel_array,grad_P_HbyA,HbyA)
+            HbyA = get_HbyA(HbyA,rUA,vel_array,grad_P.weights)
+            model.replace_cell_values([0,1,2],HbyA)
+            # div_u,face_value = divFlux(HbyA,model)
             # Interpolate HbyA to Faces and get mass flux
             # Add to RHS
 
             for _ in range(self.NUM_INNER_LOOPS):
                 model.face_interpolation()
                 model.calculate_gradients()
-                model.calculate_mass_flux(rhie_chow=rhie_chow,rUA_faces = rUA_faces)
+                model.calculate_mass_flux(rhie_chow=False,rUA_faces = rUA_faces)
 
                 # Pressure Correction
                 div_u = model.calculate_divergence()
@@ -92,20 +92,24 @@ class SIMPLE():
 
                 p_corr_equation.form_system(p_correction_diffusion,fvm = model)
                 p_corr_equation.add_RHS(div_u)
-                # print(p_corr_equation.dense)
                 p_corr_equation.replace_row(0,0.)
                 
                 inner_loop_result,p_cor = p_corr_equation.solve_Axb()
                 #Update Pressure
             #     model.replace_cell_values(4,p_cor)
                 # print(model.cell_values.numpy()[:,3])
-                model.update_cell_values(3,p_cor,scale = self.p_relaxation_factor)
+                model.relax(p_cor,alpha = self.p_relaxation_factor, output_index= 3)
+                # model.update_cell_values(3,p_cor,scale = self.p_relaxation_factor)
                 # print(model.cell_values.numpy()[:,3])
                 #Update Velocity
-                vel_correction = p_corr_equation.calculate_gradient(coeff=rUA_faces,fvm = model)
-                sub_1D_array(vel_array,vel_correction.flatten(),vel_array)
-                model.replace_cell_values([0,1,2],vel_array)
-            
+                # vel_correction = p_corr_equation.calculate_gradient(coeff=rUA_faces,fvm = model)
+                model.face_interpolation()
+                model.calculate_gradients()
+                vel_correction = model.get_gradient(3,coeff = rUA).flatten()
+                
+                sub_1D_array(HbyA,vel_correction,HbyA)
+                model.replace_cell_values([0,1,2],HbyA)
+                
 
 
             if i % steps_per_check == 0:
