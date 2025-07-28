@@ -4,9 +4,9 @@ import pyvista as pv
 import numpy as np
 n = 2
 pv_mesh = create_2D_grid((0,0,0),n,n,1,1,element_type= 'wedge',unstructured_wedge = False,display_mesh=False)
-show_cell_ids = False 
+show_cell_ids = True 
 show_nodes = False
-show_face_normals = True
+show_face_normals = False
 m = Mesh(pv_mesh)
 face_ids = m.cell_properties.faces
 normals = m.cell_properties.normal

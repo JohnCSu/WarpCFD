@@ -18,7 +18,7 @@ if __name__ == '__main__':
     Re = 100
     G,nu = 1,1/Re
     pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,element_type= 'hex',display_mesh= False,save = 'wedge')
-    m = Mesh(pv_mesh,num_outputs=5)
+    m = Mesh(pv_mesh,num_outputs=4)
     define_boundary_walls(m)
     # IC = np.load(f'benchmark_n{n}.npy')
     m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip
@@ -38,21 +38,22 @@ if __name__ == '__main__':
     
     m.set_cell_value(0,p= 0)
     
-    model = FVM(m,output_variables = ['u','v','w','p','p_cor'],density = 1.,viscosity= nu,float_dtype =wp.float32)
+    model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
     model.init_step()
+    centroids = model.struct_member_to_array('centroid','cells')
     results = m.pyvista_mesh
     IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)
     IC[-1,:] = 0.
     # model.set_initial_conditions(wp.array(IC))
 
-    solver = SIMPLE(model,0.7,0.3)
-    solver.run(500,40)
+    solver = SIMPLE(model,0.7,0.3,correction=True)
+    solver.run(2000,100)
 
     # exit()
     from matplotlib import pyplot as plt
 
     velocity = solver.vel_array.numpy().reshape(-1,3)
-    p = model.cell_values.numpy()[:,-1]
+    p = model.cell_values.numpy()[:,3]
     u = velocity[:,0]
     v = velocity[:,1]
     w = velocity[:,2]
@@ -66,10 +67,16 @@ if __name__ == '__main__':
     plt.tricontourf(x,y,v,cmap ='jet',levels = 100)
     plt.colorbar()
     plt.show()
+    
+    plt.tricontourf(x,y,p,cmap ='jet',levels = 100)
+    plt.colorbar()
+    plt.show()
+
 
     plt.tricontourf(x,y,np.sqrt(u**2 + v**2),cmap ='jet',levels = np.linspace(0,1,100,endpoint= True))
     plt.colorbar()
     plt.show()
+
 
     import pandas as pd
     v_benchmark = pd.read_csv(r'examples\LDC\v_velocity_results.csv',sep = ',')
