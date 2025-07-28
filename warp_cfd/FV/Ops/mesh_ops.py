@@ -53,32 +53,6 @@ class Mesh_Ops(Ops):
             if cell_struct[i].value_is_fixed[output]:
                 cell_values[i,output] = fixed_value[i][output]
             
-        # @wp.kernel
-        # def _internal_calculate_face_interpolation_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
-        #                                                   cell_values:wp.array2d(dtype = self.float_dtype),
-        #                                                   face_values:wp.array2d(dtype=self.float_dtype),
-        #                                                   face_structs:wp.array(dtype=self.face_struct),
-        #                                   cell_structs:wp.array(dtype = self.cell_struct),
-        #                                   internal_face_ids:wp.array(dtype= self.face_properties.internal_face_ids.dtype),
-        #                                   output_indices:wp.array(dtype=self.int_dtype),
-        #                                   interpolation_method:int):
-            
-        #     '''
-        #     We assume internal faces cannot have boundary conditions applied to them
-        #     '''
-        #     i,output_idx = wp.tid() # Loop through internal faces only
-        #     output = output_indices[output_idx]
-        #     face_id = internal_face_ids[i]
-        #     adjacent_cell_ids = face_structs[face_id].adjacent_cells
-        #     owner_cell = cell_structs[adjacent_cell_ids[0]]
-        #     neighbor_cell = cell_structs[adjacent_cell_ids[1]] 
-
-        #     if interpolation_method == 0: # Central Difference
-        #         face_values[face_id,output] = central_difference(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
-        #     elif interpolation_method == 1: # Upwind
-        #         face_values[face_id,output] = upwind(cell_values,mass_fluxes,owner_cell,neighbor_cell,face_structs[face_id],output)
-
-        
         @wp.kernel
         def _rhie_chow_correction_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
                                          cell_values:wp.array2d(dtype = self.float_dtype),
@@ -264,6 +238,18 @@ class Mesh_Ops(Ops):
             out = wp.zeros(shape = self.num_cells,dtype=self.float_dtype)
         else:
             out.zero_()
+
+
+
+
+@wp.kernel
+def get_gradient_kernel(cell_array:wp.array2d(dtype = Any),coeff:wp.array(dtype=Any),cell_gradients:wp.array2d(dtype = Any),global_output_idx:int):
+    i,j = wp.tid() # C,3
+    if coeff.shape[0] == 1:
+        coeff_ = coeff[0]
+    else:
+        coeff_ = coeff[i]
+    cell_array[i,j] = coeff_*cell_gradients[i,global_output_idx][j]
 
 
 

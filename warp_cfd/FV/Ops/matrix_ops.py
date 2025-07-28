@@ -272,3 +272,7 @@ class Matrix_Ops(Ops):
     
     def replace_row(self,bsr_matrix:sparse.BsrMatrix,rhs:wp.array,row_id:wp.array,value:wp.array):
         wp.launch(kernel=self._replace_row,dim = row_id.shape, inputs=[bsr_matrix.offsets,bsr_matrix.columns,bsr_matrix.values,rhs,row_id,value])
+
+
+
+

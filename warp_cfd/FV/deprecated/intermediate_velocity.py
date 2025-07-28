@@ -1,6 +1,6 @@
 import warp as wp
 from warp_cfd.FV.Ops.mesh_ops import Mesh_Ops 
-from warp_cfd.FV.Ops.weight_ops import Weights_Ops
+from warp_cfd.FV.deprecated.weight_ops import Weights_Ops
 from warp_cfd.FV.Ops.matrix_ops import Matrix_Ops
 from warp import sparse
 from warp_cfd.FV.utils import COO_Arrays
