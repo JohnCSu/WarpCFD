@@ -7,6 +7,7 @@ import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array,add_1D_array,div_1D_array
 from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA,get_HbyA,divFlux
 from warp.types import vector
+from warp.optim import linear
 class SIMPLE():
     def __init__(self,model:FVM,u_relaxation_factor=0.7,p_relaxation_factor = 0.3,correction = False) -> None:
         self.model = model
@@ -19,8 +20,8 @@ class SIMPLE():
 
         self.vel_equation = Matrix(model,fields = velocity_vars)
 
-        self.p_correction_diffusion = DiffusionTerm(model,'p_cor',need_global_index= True,von_neumann= 0.,correction=correction)
-        self.p_corr_equation = Matrix(model,fields = 'p_cor')
+        self.p_correction_diffusion = DiffusionTerm(model,'p',need_global_index= True,von_neumann= 0.,correction=correction)
+        self.p_corr_equation = Matrix(model,fields = 'p',solver = linear.cg)
 
         self.vel_correction = wp.zeros(shape=(model.num_cells,3),dtype=float)
 
@@ -48,10 +49,10 @@ class SIMPLE():
         rUA = self.rUA 
         rUA_faces = self.rUA_faces
         for i in range(num_steps):
+            model.set_boundary_conditions()
             model.face_interpolation()
-            
             model.calculate_gradients()
-            model.calculate_mass_flux(rhie_chow=False,rUA_faces = rUA_faces)
+            model.calculate_mass_flux()
 
             # intermediate Velocity Step
             convection(model)
@@ -65,25 +66,19 @@ class SIMPLE():
             Ap = vel_equation.diagonal
             outer_loop_result,vel_array = vel_equation.solve_Axb(vel_array)
             # print(vel_array[::3])
-            
-            
-            # model.replace_cell_values([0,1,2],vel_array)
-            
-
+     
             rUA = calculate_rUA(Ap,model.cells,rUA)
             rUA_faces = interpolate_cell_value_to_face(rUA_faces,rUA,model.faces)
 
-
-            HbyA = get_HbyA(HbyA,rUA,vel_array,grad_P.weights)
-            model.replace_cell_values([0,1,2],HbyA)
-            # div_u,face_value = divFlux(HbyA,model)
-            # Interpolate HbyA to Faces and get mass flux
-            # Add to RHS
-
+            p_grad = model.get_gradient('p').flatten() 
+            HbyA = get_HbyA(HbyA,rUA,vel_array,p_grad)
+            model.replace_cell_values(['u','v','w'],HbyA)
+            
             for _ in range(self.NUM_INNER_LOOPS):
+                
                 model.face_interpolation()
-                model.calculate_gradients()
-                model.calculate_mass_flux(rhie_chow=False,rUA_faces = rUA_faces)
+                model.calculate_gradients() # We need P grad
+                model.calculate_mass_flux()
 
                 # Pressure Correction
                 div_u = model.calculate_divergence()
@@ -95,22 +90,16 @@ class SIMPLE():
                 p_corr_equation.replace_row(0,0.)
                 
                 inner_loop_result,p_cor = p_corr_equation.solve_Axb()
-                #Update Pressure
-            #     model.replace_cell_values(4,p_cor)
-                # print(model.cell_values.numpy()[:,3])
+
                 model.relax(p_cor,alpha = self.p_relaxation_factor, output_index= 3)
-                # model.update_cell_values(3,p_cor,scale = self.p_relaxation_factor)
-                # print(model.cell_values.numpy()[:,3])
-                #Update Velocity
-                # vel_correction = p_corr_equation.calculate_gradient(coeff=rUA_faces,fvm = model)
-                model.face_interpolation()
-                model.calculate_gradients()
-                vel_correction = model.get_gradient(3,coeff = rUA).flatten()
+                
+                model.face_interpolation('p')
+                model.calculate_gradients('p')
+                vel_correction = model.get_gradient('p',coeff = rUA).flatten()
                 
                 sub_1D_array(HbyA,vel_correction,HbyA)
-                model.replace_cell_values([0,1,2],HbyA)
+                model.replace_cell_values(['u','v','w'],HbyA)
                 
-
 
             if i % steps_per_check == 0:
                 print(f'step iter: {i}')

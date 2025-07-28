@@ -197,21 +197,21 @@ class Mesh_Ops(Ops):
         wp.launch(kernel = self._internal_calculate_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [mass_fluxes,cell_values,face_values,faces,cells,self.face_properties.internal_face_ids,output_indices,interpolation_method])
         wp.launch(kernel = self._boundary_calculate_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [cell_values,face_values,face_gradients,faces,cells,self.face_properties.boundary_face_ids,output_indices])
     
-    def rhie_chow_correction(self,mass_fluxes,cell_values,face_values,cell_gradients,D_face,cells,faces,output_indices = None):
-        '''
-        cell_values:wp.array2d(self.float_dtype),
-                                         face_values:wp.array2d(self.float_dtype),
-                                         cell_gradients:wp.array2d(dtype=self.vector_type)
-                                          D_face: wp.array(dtype=self.float_dtype),
-                                          cell_structs:wp.array(dtype = self.cell_struct),
-                                          face_structs:wp.array(dtype=self.face_struct),
-                                          internal_face_ids:wp.array(dtype= self.face_properties.internal_face_ids.dtype),
-                                          output_indices:wp.array(dtype=self.int_dtype)
-        '''
-        if output_indices is None:
-            output_indices = wp.array([0,1,2],dtype= self.int_dtype) 
-        internal_face_ids= self.face_properties.internal_face_ids 
-        wp.launch(self._rhie_chow_correction, dim = (internal_face_ids.shape[0]), inputs = [mass_fluxes,cell_values,face_values,cell_gradients,D_face,cells,faces,internal_face_ids,output_indices])
+    # def rhie_chow_correction(self,mass_fluxes,cell_values,face_values,cell_gradients,D_face,cells,faces,output_indices = None):
+    #     '''
+    #     cell_values:wp.array2d(self.float_dtype),
+    #                                      face_values:wp.array2d(self.float_dtype),
+    #                                      cell_gradients:wp.array2d(dtype=self.vector_type)
+    #                                       D_face: wp.array(dtype=self.float_dtype),
+    #                                       cell_structs:wp.array(dtype = self.cell_struct),
+    #                                       face_structs:wp.array(dtype=self.face_struct),
+    #                                       internal_face_ids:wp.array(dtype= self.face_properties.internal_face_ids.dtype),
+    #                                       output_indices:wp.array(dtype=self.int_dtype)
+    #     '''
+    #     if output_indices is None:
+    #         output_indices = wp.array([0,1,2],dtype= self.int_dtype) 
+    #     internal_face_ids= self.face_properties.internal_face_ids 
+    #     wp.launch(self._rhie_chow_correction, dim = (internal_face_ids.shape[0]), inputs = [mass_fluxes,cell_values,face_values,cell_gradients,D_face,cells,faces,internal_face_ids,output_indices])
 
 
     def interpolate_internal_faces(self,mass_fluxes,cell_values,face_values,cells,faces,output_indices:wp.array | None = None,interpolation_method = 1):
