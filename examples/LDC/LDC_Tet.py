@@ -11,7 +11,7 @@ import pyvista as pv
 
 # wp.config.mode = "debug
 '''
-LDC example for Re = 100 run for 2000 iterations for Hex mesh example. Here Othrogonal correctors are turned off as it is essentially a cartesian grid
+LDC example for Re = 100 run for 2000 iterations for tetrahedral mesh example. Here Othrogonal correctors are turned on
 '''
 if __name__ == '__main__':
     wp.init()
@@ -22,7 +22,7 @@ if __name__ == '__main__':
     Re = 100
     G,nu = 1,1/Re
     dz =0.1
-    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,dz = dz,element_type= 'hex',display_mesh= False,save = 'wedge')
+    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,dz = dz,element_type= 'tet',display_mesh= False)
     m = Mesh(pv_mesh,num_outputs=4)
     define_boundary_walls(m)
     # IC = np.load(f'benchmark_n{n}.npy')
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     IC[-1,:] = 0.
     # model.set_initial_conditions(wp.array(IC))
 
-    solver = SIMPLE(model,0.7,0.3,correction=False)
+    solver = SIMPLE(model,0.7,0.3,correction=True)
     solver.run(2000,100)
 
     # exit()

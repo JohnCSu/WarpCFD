@@ -4,20 +4,27 @@ import numpy as np
 import warp as wp
 from warp_cfd.FV.Ops.array_ops import sub_1D_array
 from warp_cfd.FV.implicit_Solvers import SIMPLE
+from warp_cfd.preprocess import Mesh
+
 from warp_cfd.preprocess import create_2D_grid,Mesh,define_boundary_walls
-wp.config.mode = "debug"
-wp.init()
+import pyvista as pv
+
+# wp.config.mode = "debug
+'''
+LDC example for Re = 100 run for 2000 iterations for wedge mesh example. Here Othrogonal correctors are turned on
+'''
 if __name__ == '__main__':
-    np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
+    wp.init()
     # wp.clear_kernel_cache()
-    n = 2
+    np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
+    n = 41 # Approximate number of cells in x and y direction
     w,l = 1.,1.
     Re = 100
     G,nu = 1,1/Re
-    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,element_type= 'wedge',display_mesh= True,save = 'wedge')
-    m = Mesh(pv_mesh)
+    dz =0.1
+    pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,dz = dz,element_type= 'wedge',display_mesh= False)
+    m = Mesh(pv_mesh,num_outputs=4)
     define_boundary_walls(m)
-
     # IC = np.load(f'benchmark_n{n}.npy')
     m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip
     m.set_boundary_value('-X',u = 0,v = 0,w = 0) # No Slip
@@ -36,58 +43,63 @@ if __name__ == '__main__':
     
     m.set_cell_value(0,p= 0)
     
-    model = FVM(m,output_variables = ['u','v','p','p_cor'],density = 1.,viscosity= nu,float_dtype =wp.float32)
+    model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
     model.init_step()
-    results = m.pyvista_mesh
+    centroids = model.struct_member_to_array('centroid','cells')
     
     IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)
-    IC[:,-1] = 0.
-    model.set_initial_conditions(wp.array(IC))
-    solver = SIMPLE(model,1.,0.3)
-    solver.run(1,1,rhie_chow = True)
+    IC[-1,:] = 0.
+    # model.set_initial_conditions(wp.array(IC))
 
+    solver = SIMPLE(model,0.7,0.3,correction=True)
+    solver.run(2000,100)
+
+    # exit()
     from matplotlib import pyplot as plt
 
     velocity = solver.vel_array.numpy().reshape(-1,3)
-    p = model.cell_values.numpy()[:,-1]
+    p = model.cell_values.numpy()[:,3]
     u = velocity[:,0]
     v = velocity[:,1]
     w = velocity[:,2]
     centroids = model.struct_member_to_array('centroid','cells')
     x,y,z = [centroids[:,i] for i in range(3)]
-    # exit()
-    plt.tricontourf(x,y,u,cmap ='jet',levels = 100)
-    plt.colorbar()
-    plt.show()
 
-    plt.tricontourf(x,y,v,cmap ='jet',levels = 100)
-    plt.colorbar()
-    plt.show()
+    pv_mesh['u'] = u
+    pv_mesh['v'] = v
+    pv_mesh['w'] = w
+    pv_mesh['p'] = p
+    pv_mesh['u_mag'] = np.sqrt(u**2 + v**2)
 
-    plt.tricontourf(x,y,np.sqrt(u**2 + v**2),cmap ='jet',levels = np.linspace(0,1,100,endpoint= True))
-    plt.colorbar()
-    plt.show()
-
+    pv_mesh.plot(scalars="u", show_edges=True,n_colors = 100,cmap='jet')
+    pv_mesh.plot(scalars="v", show_edges=True,n_colors = 100,cmap='jet')
+    pv_mesh.plot(scalars="p", show_edges=True,n_colors = 100,cmap='jet')
+    pv_mesh.plot(scalars="u_mag", show_edges=True,n_colors = 100,cmap='jet')
+    
+    
     import pandas as pd
-    v_benchmark = pd.read_csv('v_velocity_results.csv',sep = ',')
-    u_benchmark = pd.read_csv('u_velocity_results.txt',sep= '\t')
+    v_benchmark = pd.read_csv(r'examples\LDC\v_velocity_results.csv',sep = ',')
+    u_benchmark = pd.read_csv(r'examples\LDC\u_velocity_results.txt',sep= '\t')
 
-    v_05 = v[y == 0.5]
+    points = np.linspace(0.,1.,n)
+    horizontal_centerline = pv.Line((0,0.5,dz/2),(1,0.5,dz/2),len(points)-1)
+    horizontal_centerline= horizontal_centerline.sample(pv_mesh, pass_point_data=False)
+    v_05 = horizontal_centerline['v']
+    print(len(v_05))
     print(f'CFD max {v_05.max()}, Benchmark Max :{v_benchmark['100'].max()}')
     plt.plot(v_benchmark['%x'],v_benchmark[str(Re)],'o',label = 'Ghia et al')
-    plt.plot(x[y == 0.5],v_05,label = 'CFD Code')
-    plt.legend()
-    plt.show()
-
-    u_05 = u[x == 0.5]
-    print(f'CFD max {v_05.max()}, Benchmark Max :{u_benchmark['100'].max()}')
-    plt.plot(u_benchmark['%y'],u_benchmark[str(Re)],'o',label = 'Ghia et al')
-    plt.plot(y[x == 0.5],u_05,label = 'CFD Code')
-    plt.legend()
-    plt.show()
-
-
     
-        # model.intermediate_velocity_step.solve()
-    # exit()
-    # print(model.mass_fluxes.numpy())
+    
+    plt.plot(points,v_05,label = 'CFD Code')
+    plt.legend()
+    plt.show()
+
+    vertical_centerline = pv.Line((0.5,0.,dz/2),(0.5,1.,dz/2),len(points)-1)
+    vertical_centerline= vertical_centerline.sample(pv_mesh, pass_point_data=False)
+
+    u_05 = vertical_centerline['u']
+    print(f'CFD max {u_05.max()}, Benchmark Max :{u_benchmark['100'].max()}')
+    plt.plot(u_benchmark['%y'],u_benchmark[str(Re)],'o',label = 'Ghia et al')
+    plt.plot(points,u_05,label = 'CFD Code')
+    plt.legend()
+    plt.show()
