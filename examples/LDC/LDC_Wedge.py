@@ -71,12 +71,13 @@ if __name__ == '__main__':
     pv_mesh['p'] = p
     pv_mesh['u_mag'] = np.sqrt(u**2 + v**2)
 
-    pv_mesh.plot(scalars="u", show_edges=True,n_colors = 100,cmap='jet')
-    pv_mesh.plot(scalars="v", show_edges=True,n_colors = 100,cmap='jet')
-    pv_mesh.plot(scalars="p", show_edges=True,n_colors = 100,cmap='jet')
-    pv_mesh.plot(scalars="u_mag", show_edges=True,n_colors = 100,cmap='jet')
-    
-    
+    for output in ['u','v','p','u_mag']: 
+        plotter = pv.Plotter(off_screen=False)
+        plotter.add_mesh(pv_mesh,scalars = output, show_edges= False,n_colors= 100,cmap= 'jet')
+        plotter.camera_position = 'xy'
+        # plotter.screenshot(f'{output}.png')
+        plotter.show()
+
     import pandas as pd
     v_benchmark = pd.read_csv(r'examples\LDC\v_velocity_results.csv',sep = ',')
     u_benchmark = pd.read_csv(r'examples\LDC\u_velocity_results.txt',sep= '\t')

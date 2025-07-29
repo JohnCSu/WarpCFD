@@ -71,11 +71,14 @@ if __name__ == '__main__':
     pv_mesh['p'] = p
     pv_mesh['u_mag'] = np.sqrt(u**2 + v**2)
 
-    pv_mesh.plot(scalars="u", show_edges=True,n_colors = 100,cmap='jet')
-    pv_mesh.plot(scalars="v", show_edges=True,n_colors = 100,cmap='jet')
-    pv_mesh.plot(scalars="p", show_edges=True,n_colors = 100,cmap='jet')
-    pv_mesh.plot(scalars="u_mag", show_edges=True,n_colors = 100,cmap='jet')
-    
+    # To save images set off_screen to False and uncomment screenshot line
+    for output in ['u','v','p','u_mag']: 
+        plotter = pv.Plotter(off_screen=False)
+        plotter.add_mesh(pv_mesh,scalars = output, show_edges= False,n_colors= 100,cmap= 'jet')
+        plotter.camera_position = 'xy'
+        # plotter.screenshot(f'{output}.png')
+        plotter.show()
+        
     
     import pandas as pd
     v_benchmark = pd.read_csv(r'examples\LDC\v_velocity_results.csv',sep = ',')
@@ -92,6 +95,7 @@ if __name__ == '__main__':
     
     plt.plot(points,v_05,label = 'CFD Code')
     plt.legend()
+    plt.savefig('v_velocity at hori_centerline.png')
     plt.show()
 
     vertical_centerline = pv.Line((0.5,0.,dz/2),(0.5,1.,dz/2),len(points)-1)
@@ -102,4 +106,5 @@ if __name__ == '__main__':
     plt.plot(u_benchmark['%y'],u_benchmark[str(Re)],'o',label = 'Ghia et al')
     plt.plot(points,u_05,label = 'CFD Code')
     plt.legend()
+    plt.savefig('u_velocity at vert_centerline.png')
     plt.show()
