@@ -43,7 +43,7 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,num_outputs = 4,di
 
         # values: vector(length=num_outputs,dtype = float_dtype)
         # gradients: mat(shape = (num_outputs,dimension),dtype= float_dtype)
-        value_is_fixed:vector(length=num_outputs,dtype = wp.uint8)
+        # value_is_fixed:vector(length=num_outputs,dtype = wp.uint8)
     return Cell
 
 
@@ -88,6 +88,9 @@ HEX_FACE = _create_face_struct(nodes_per_face=4)
 
 TETRA = _create_cell_struct(nodes_per_cell=4,faces_per_cell=3)
 TETRA_FACE = _create_face_struct(nodes_per_face=3)
+
+WEDGE = _create_cell_struct(nodes_per_cell=6,faces_per_cell=5)
+WEDGE_FACE = _create_face_struct(nodes_per_face=4)
 
 
 def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
@@ -142,7 +145,7 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
             cell_structs[i].face_sides = face_sides[i]
             cell_structs[i].nnz = nnz_per_cell[i]
             cell_structs[i].face_offset_index = face_offset_index[i]
-            cell_structs[i].value_is_fixed = value_is_fixed[i]
+            # cell_structs[i].value_is_fixed = value_is_fixed[i]
 
         @wp.kernel
         def init_face_structs(face_structs:wp.array(dtype= face_struct),
