@@ -2,7 +2,7 @@ from warp.types import vector
 from warp import mat
 import warp as wp
 from warp_cfd.preprocess.mesh import cells_data,faces_data
-def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
+def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
     
     @wp.struct
     class Cell:
@@ -71,13 +71,11 @@ def _create_face_struct(nodes_per_face:int,num_outputs = 4,dimension:int = 3, fl
     return Face
 
 
-def _create_node_struct(num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
+def _create_node_struct(dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.struct
     class Node:
         id: int_dtype
         coordinates: vector(length=dimension,dtype= float_dtype)
-        values:vector(length=num_outputs,dtype = float_dtype)
-        grads: mat(shape= (num_outputs,dimension),dtype = float_dtype )
     return Node
     
 
@@ -96,7 +94,7 @@ WEDGE_FACE = _create_face_struct(nodes_per_face=4)
 def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
     assert int_dtype == wp.int32, 'only 32bit int is supported'
 
-    if nodes_per_cell == 8 and faces_per_cell == 8 and num_outputs == 4 and dimension == 3 and nodes_per_face == 4:
+    if nodes_per_cell == 8 and faces_per_cell == 8 and dimension == 3 and nodes_per_face == 4:
         return HEX,HEX_FACE,NODE3D
     elif nodes_per_cell == 4 and faces_per_cell == 3 and num_outputs == 4 and dimension ==3 and nodes_per_face == 3:
         return TETRA,TETRA_FACE,NODE3D
@@ -130,7 +128,7 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
                             face_sides:wp.array(dtype=cell_properties.face_side.dtype),
                             nnz_per_cell:wp.array(dtype=cell_properties.nnz_per_cell.dtype),
                             face_offset_index:wp.array(dtype=cell_properties.face_offset_index.dtype),
-                            value_is_fixed:wp.array(dtype=cell_properties.value_is_fixed.dtype),
+                            ,
                             ):
             i = wp.tid()
             cell_structs[i].id = i
@@ -145,7 +143,7 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
             cell_structs[i].face_sides = face_sides[i]
             cell_structs[i].nnz = nnz_per_cell[i]
             cell_structs[i].face_offset_index = face_offset_index[i]
-            # cell_structs[i].value_is_fixed = value_is_fixed[i]
+            
 
         @wp.kernel
         def init_face_structs(face_structs:wp.array(dtype= face_struct),
@@ -207,7 +205,6 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
                                                                                         cell_properties.face_side,
                                                                                         cell_properties.nnz_per_cell,
                                                                                         cell_properties.face_offset_index,
-                                                                                        cell_properties.value_is_fixed,
                                                                                         ])
         
         wp.launch(kernel=init_face_structs,dim = num_faces,inputs = [
