@@ -2,9 +2,9 @@ from warp_cfd.preprocess.grid import create_2D_grid
 from warp_cfd.preprocess.mesh import Mesh
 import pyvista as pv
 import numpy as np
-n = 2
-pv_mesh = create_2D_grid((0,0,0),n,n,1,1,element_type= 'wedge',unstructured_wedge = False,display_mesh=False)
-show_cell_ids = True 
+n = 31
+pv_mesh = create_2D_grid((0,0,0),n,n,1,1,element_type= 'tet',unstructured_wedge = False,display_mesh=False)
+show_cell_ids = False
 show_nodes = False
 show_face_normals = False
 m = Mesh(pv_mesh)
@@ -34,9 +34,9 @@ if show_face_normals:
     rows, cols = np.nonzero(valid)
     face_centroids[rows, cols] = centroids[face_ids[rows, cols]]
 
-    k = [0,2,4,6]
-    centroids_flat = face_centroids.reshape(-1, 3)
-    normals_flat = normals.reshape(-1, 3)
+    k = 0
+    centroids_flat = face_centroids[k].reshape(-1, 3)
+    normals_flat = normals[k].reshape(-1, 3)
     valid = ~np.isnan(normals_flat).any(axis=1)
 
     points = pv.PolyData(centroids_flat)
