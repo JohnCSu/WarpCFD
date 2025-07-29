@@ -95,7 +95,7 @@ if __name__ == '__main__':
     
     plt.plot(points,v_05,label = 'CFD Code')
     plt.legend()
-    plt.savefig('v_velocity at hori_centerline.png')
+    # plt.savefig('v_velocity at hori_centerline.png')
     plt.show()
 
     vertical_centerline = pv.Line((0.5,0.,dz/2),(0.5,1.,dz/2),len(points)-1)
@@ -106,5 +106,5 @@ if __name__ == '__main__':
     plt.plot(u_benchmark['%y'],u_benchmark[str(Re)],'o',label = 'Ghia et al')
     plt.plot(points,u_05,label = 'CFD Code')
     plt.legend()
-    plt.savefig('u_velocity at vert_centerline.png')
+    # plt.savefig('u_velocity at vert_centerline.png')
     plt.show()
