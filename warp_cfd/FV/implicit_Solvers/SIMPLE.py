@@ -81,7 +81,7 @@ class SIMPLE():
                 model.calculate_mass_flux()
 
                 # Pressure Correction
-                div_u = model.calculate_divergence()
+                div_u = model.divFlux()
                 
                 p_correction_diffusion(model,viscosity = rUA_faces)
 
