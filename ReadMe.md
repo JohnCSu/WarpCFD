@@ -23,6 +23,15 @@ Steady State Lid Driven Cavity (Re=100) 41x41 hex elements for 2000 iterations w
 </p>
 
 
+# Installation
+```bash
+git clone https://github.com/JohnCSu/WarpCFD.git
+cd WarpCFD
+python3 -m pip install -e .
+pip install -r requirements.txt
+```
+
+
 # RoadMap (In hopeful order)
 - ~~Implement SIMPLE loop~~  
 - Add Pressure inlet/outlet

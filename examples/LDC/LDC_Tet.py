@@ -88,7 +88,7 @@ if __name__ == '__main__':
     horizontal_centerline= horizontal_centerline.sample(pv_mesh, pass_point_data=False)
     v_05 = horizontal_centerline['v']
     print(len(v_05))
-    print(f'CFD max {v_05.max()}, Benchmark Max :{v_benchmark['100'].max()}')
+    print(f"CFD max {v_05.max()}, Benchmark Max :{v_benchmark['100'].max()}")
     plt.plot(v_benchmark['%x'],v_benchmark[str(Re)],'o',label = 'Ghia et al')
     
     
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     vertical_centerline= vertical_centerline.sample(pv_mesh, pass_point_data=False)
 
     u_05 = vertical_centerline['u']
-    print(f'CFD max {u_05.max()}, Benchmark Max :{u_benchmark['100'].max()}')
+    print(f"CFD max {u_05.max()}, Benchmark Max :{u_benchmark['100'].max()}")
     plt.plot(u_benchmark['%y'],u_benchmark[str(Re)],'o',label = 'Ghia et al')
     plt.plot(points,u_05,label = 'CFD Code')
     plt.legend()
