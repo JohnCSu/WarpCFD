@@ -125,11 +125,7 @@ class FVM():
 
 
     def init_global_arrays(self):
-        self.massflux_array = wp.empty(shape = (self.num_cells,self.faces_per_cell))
         
-        self.intermediate_velocity = wp.zeros(shape = self.num_cells*self.dimension,dtype=self.float_dtype)
-        self.initial_velocity = wp.zeros_like(self.intermediate_velocity)
-        self.corrected_velocity = wp.zeros_like(self.intermediate_velocity)
         
         self.cell_values = wp.zeros((self.num_cells,self.num_outputs),dtype = self.float_dtype)
         self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.mesh_ops.vector_type)
