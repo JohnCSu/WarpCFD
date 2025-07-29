@@ -43,15 +43,15 @@ class Mesh_Ops(Ops):
             output = output_indices[output_idx]
             cell_values[i,output] = IC[i,output]
         
-        @wp.kernel
-        def _apply_cell_value_kernel(cell_values:wp.array2d(dtype=self.float_dtype),
-                                     cell_struct:wp.array(dtype=self.cell_struct),
-                                     fixed_value: wp.array(dtype=self.cell_properties.fixed_value.dtype)):
-            i,output = wp.tid() # C,O
+        # @wp.kernel
+        # def _apply_cell_value_kernel(cell_values:wp.array2d(dtype=self.float_dtype),
+        #                              cell_struct:wp.array(dtype=self.cell_struct),
+        #                              fixed_value: wp.array(dtype=self.cell_properties.fixed_value.dtype)):
+        #     i,output = wp.tid() # C,O
 
 
-            if cell_struct[i].value_is_fixed[output]:
-                cell_values[i,output] = fixed_value[i][output]
+            # if cell_struct[i].value_is_fixed[output]:
+            #     cell_values[i,output] = fixed_value[i][output]
             
         @wp.kernel
         def _rhie_chow_correction_kernel(mass_fluxes:wp.array(dtype = self.float_dtype),
@@ -160,7 +160,7 @@ class Mesh_Ops(Ops):
                 wp.atomic_add(div_u,i,-mass_fluxes[face_id])
 
         self._apply_BC = _apply_BC_kernel
-        self._apply_cell_value = _apply_cell_value_kernel
+        # self._apply_cell_value = _apply_cell_value_kernel
         self._set_initial_conditions = _set_initial_conditions_kernel
 
         # self._internal_calculate_face_interpolation = _internal_calculate_face_interpolation_kernel
@@ -181,8 +181,8 @@ class Mesh_Ops(Ops):
             IC,cell_values,output_indices])
         
 
-    def apply_cell_value(self,cells):
-        wp.launch(kernel=self._apply_cell_value,dim = (cells.shape[0],self.num_outputs) ,inputs = [cells,self.cell_properties.fixed_value])
+    # def apply_cell_value(self,cells):
+    #     wp.launch(kernel=self._apply_cell_value,dim = (cells.shape[0],self.num_outputs) ,inputs = [cells,self.cell_properties.fixed_value])
 
     def calculate_face_interpolation(self,mass_fluxes,cell_values,face_values,face_gradients,cells,faces,output_indices:wp.array | None = None,interpolation_method = 1):
         '''
@@ -241,7 +241,7 @@ class Mesh_Ops(Ops):
 
 
 
-
+from warp.types import vector
 @wp.kernel
 def get_gradient_kernel(cell_array:wp.array2d(dtype = Any),coeff:wp.array(dtype=Any),cell_gradients:wp.array2d(dtype = Any),global_output_idx:int):
     i,j = wp.tid() # C,3
@@ -251,8 +251,22 @@ def get_gradient_kernel(cell_array:wp.array2d(dtype = Any),coeff:wp.array(dtype=
         coeff_ = coeff[i]
     cell_array[i,j] = coeff_*cell_gradients[i,global_output_idx][j]
 
+# @wp.overload(get_gradient_kernel,[wp.array2d(dtype = wp.float32),wp.arraywp.float32,vector(3,dtype=wp.float32)])
+# @wp.overload(get_gradient_kernel,[wp.array2d(dtype = wp.float64),wp.array(dtype = wp.float64),vector(3,dtype=wp.float64)])
 
 
+
+def divFlux_kernel(cell_struct,float_dtype):
+    @wp.kernel
+    def _divFlux_kernel(mass_fluxes:wp.array(dtype=float_dtype),cell_structs:wp.array(dtype=cell_struct),div_u:wp.array(dtype=float_dtype)):
+        i,j = wp.tid() # C,F
+        # calculate divergence
+        face_id = cell_structs[i].faces[j]
+        if cell_structs[i].face_sides[j] == 0: # Means cell is the Owner side of face
+            wp.atomic_add(div_u,i,mass_fluxes[face_id])
+        else: # means is neighbor side of face so set to -ve
+            wp.atomic_add(div_u,i,-mass_fluxes[face_id])
+    return _divFlux_kernel
 # @wp.kernel
 # def integrate_divergence(arr:wp.array(dtype=float),cell_structs:wp.array(dtype=Any),face_structs:wp.array(dtype=Any),div_u:wp.array(dtype=float)):
 #     i,j = wp.tid() # C,F
