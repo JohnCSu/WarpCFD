@@ -123,8 +123,8 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
         gmsh.model.occ.synchronize()
 
         # Define transfinite meshing to get structured grid
-        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", 0.2)
-        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", 0.2)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", min(dx/nx,dy/ny))
+        # gmsh.option.setNumber("Mesh.CharacteristicLengthMax", min(dx/nx,dy/ny))
 
         # Recombine OFF so mesh will be tetrahedral not hex
         # gmsh.option.setNumber("Mesh.RecombineAll", 0)
