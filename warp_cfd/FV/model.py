@@ -224,14 +224,10 @@ class FVM():
         wp.launch(explicit_relax,dim = self.num_cells, inputs = [self.cell_values,new_value,alpha,output_index])
 
     def calculate_mass_flux(self):
-        # if rhie_chow:
-        #     assert isinstance(rUA_faces,wp.array),'For Rhie chow, rUA interpolated to faces must be passed in'
-        #     self.mesh_ops.rhie_chow_correction(self.mass_fluxes,self.cell_values,self.face_values,self.cell_gradients,rUA_faces,self.cells,self.faces,self.vel_indices)
-        # else:
         self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
        
 
-    def calculate_divergence(self,arr = None):
+    def divFlux(self,arr = None):
         if arr is None:
             arr = wp.zeros(shape = self.cells.shape[0],dtype= self.float_dtype)
         arr.zero_()
