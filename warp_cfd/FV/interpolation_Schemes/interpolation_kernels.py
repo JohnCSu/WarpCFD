@@ -38,6 +38,7 @@ def boundary_calculate_face_interpolation_kernel(cell_struct,face_struct,float_d
                                                         face_structs:wp.array(dtype=face_struct),
                                         cell_structs:wp.array(dtype = cell_struct),
                                         boundary_face_ids:wp.array(dtype= wp.int32),
+                                        boundary_types: wp.array2d(dtype= wp.uint8),
                                         output_indices:wp.array(dtype=wp.int32)):
         
         i,output_idx = wp.tid() # Loop through Boundary faces only
@@ -49,6 +50,6 @@ def boundary_calculate_face_interpolation_kernel(cell_struct,face_struct,float_d
 
         distance = wp.length(owner_cell.cell_centroid_to_face_centroid[cell_face_idx])
 
-        if face_structs[face_id].gradient_is_fixed[output]: # We only do face interpolation if the gradient is fixed
+        if boundary_types[i,output] == 2 : # We only do face interpolation if the gradient is fixed
             face_values[face_id,output] = distance*face_gradients[face_id,output] + cell_values[owner_cell.id,output]
     return _boundary_calculate_face_interpolation_kernel

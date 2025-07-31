@@ -238,9 +238,9 @@ class Mesh():
 
         faces.gradient_value_is_fixed = np.zeros((K,O),dtype=np.uint8)
         
-        if self.num_outputs >= 4:
-            faces.boundary_value_is_fixed[:,0:3] = 1 # Set Velocity vars to no slip
-            faces.gradient_value_is_fixed[:,3:] = 1 # P is output no 3 and we assume by default all is non-slip walls
+        # if self.num_outputs >= 4:
+        #     faces.boundary_value_is_fixed[:,0:3] = 1 # Set Velocity vars to no slip
+        #     faces.gradient_value_is_fixed[:,3:] = 1 # P is output no 3 and we assume by default all is non-slip walls
 
         faces.gradient_value = np.zeros((K,O),dtype= self.float_dtype) # (K, dim+1) dim+1 number of output variables (u,v,w,p)
         faces.cell_face_index = np.ones((K,2),dtype = self.int_dtype)*(-1)
@@ -497,13 +497,13 @@ class faces_data():
     is_boundary: np.ndarray| wp.array
     '''(K,) array that stores a boolean on whether a unique face is a boundary/external face (i.e. no neighbors) or internal face and if that variable at that face is a BC'''
     boundary_value: np.ndarray| wp.array
-    ''' (K,D+1) specifying the values (u,v,w,p in 3D) given at each face. Default all 0'''
+    ''' (K,O) specifying the values (u,v,w,p in 3D) given at each face. Default all 0'''
     gradient_value: np.ndarray| wp.array
-    ''' (K,D+1) specifying the  gradient of the variable (u,v,w,p) wrt the normal direction given at each face. Default all 0'''
+    ''' (K,O) specifying the  gradient of the variable (u,v,w,p) wrt the normal direction given at each face. Default all 0'''
     boundary_value_is_fixed : np.ndarray| wp.array
-    ''' (K,D+1) array specifying if the variable (u,v,w,p) is free or fixed. set to True if value id determined and fixed'''
+    ''' (K,O) array specifying if the variable (u,v,w,p) is free or fixed. set to True if value id determined and fixed'''
     gradient_value_is_fixed : np.ndarray| wp.array
-    ''' (K,D+1) array specifying if the gradient of the variable (u,v,w,p) wrt the normal direction is free or fixed. set to True if value id determined and fixed'''
+    ''' (K,O) array specifying if the gradient of the variable (u,v,w,p) wrt the normal direction is free or fixed. set to True if value id determined and fixed'''
     boundary_face_ids : np.ndarray| wp.array
     '''(B) array of faces ids that are boundary faces''' 
     internal_face_ids : np.ndarray| wp.array 
@@ -540,7 +540,13 @@ class faces_data():
             'w': 2,
             'p': 3,
         }
-
+    boundary_type:np.ndarray[np.uint8] | wp.array[np.uint8]
+    '''
+    Array of Size (Number of Boundary Faces). 
+    Here the type of BC to index number: 
+    - 1 : Dirichlet BC
+    - 2 : Von-Neumann BC
+    '''
     def set_boundary_value(self,face_ids: int | list |tuple |np.ndarray,u = None,v=None,w=None,p=None,overwrite_gradient= True):
         assert isinstance(face_ids,(int,list,tuple,np.ndarray))
         
@@ -583,16 +589,33 @@ class faces_data():
     def to_NVD_warp(self,float_type = wp.float32):
         '''Convert Arrays to Warp Arrays, if the last dimension matches that of the dimension in faces class, assume its a vector'''
 
-
         faces = faces_data()
         faces.array_type = 'warp'
+        faces.boundary_type = np.zeros(shape= (self.boundary_face_ids.shape[0],self.boundary_value.shape[1]), dtype = np.uint8)
 
-        # C = self.id.shape[0]
+        # WE abuse the sh-t out of numpy semantics
+        dirichlet_faces = self.boundary_value_is_fixed[self.boundary_face_ids] == 1
+        vonneumann_faces = (self.gradient_value_is_fixed[self.boundary_face_ids] == 1)*2
+
+        if not np.all(np.logical_xor(dirichlet_faces,vonneumann_faces)):
+            a = np.logical_xor(dirichlet_faces,vonneumann_faces)
+            indices = np.nonzero(a == False)
+            raise ValueError(f'It was found that the following boundary face ids were either overconstrained or underconstrained:\n ids:\n {indices[0]} \n for output indices:\n {indices[1]}')
+
+        faces.boundary_type += (dirichlet_faces.astype(np.uint8) + vonneumann_faces.astype(np.uint8))
+
+        assert np.all(  faces.boundary_type < 3) and np.all(  faces.boundary_type > 0 ),  'only dirichlet (1) and von neumann (2) can exist'
+
+        faces.boundary_type =wp.array(faces.boundary_type)
+
+        
+        
+
+
 
         for key,val in self.__dict__.items():
             if isinstance(val,np.ndarray):
                 # The last array is the vector lengh
-
                 shape = val.shape
                 n = val.shape[-1]
                 if np.issubdtype(val.dtype, np.floating):

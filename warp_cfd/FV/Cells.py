@@ -29,7 +29,7 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,dimension:int = 3,
         cell_centroid_to_face_centroid: mat(shape = (faces_per_cell,dimension),dtype=float_dtype)
         '''(F,D) matrix with D Vector containg the distance from the cell centroid to the corresponding face centroid'''
         
-        mass_fluxes: vector(length=faces_per_cell,dtype = float_dtype)
+        # mass_fluxes: vector(length=faces_per_cell,dtype = float_dtype)
         # ''' Store the flux dot(u,n)*A'''
         face_sides: vector(length=faces_per_cell,dtype = int_dtype)
         '''(F) Vector indicating for the face which side of the face it is on (0 or 1 side)'''
@@ -47,7 +47,7 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,dimension:int = 3,
     return Cell
 
 
-def _create_face_struct(nodes_per_face:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
+def _create_face_struct(nodes_per_face:int,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
     '''
     '''
     @wp.struct
@@ -64,8 +64,8 @@ def _create_face_struct(nodes_per_face:int,num_outputs = 4,dimension:int = 3, fl
         # values: vector(length=num_outputs,dtype = float_dtype)
         # gradients: vector(length=num_outputs,dtype = float_dtype)  # Assume only Normal component exists so we only need a vector
         is_boundary: wp.uint8
-        value_is_fixed: vector(length= num_outputs,dtype= wp.uint8) # 1 is fixed, 0 is free
-        gradient_is_fixed: vector(length= num_outputs,dtype= wp.uint8) 
+        # value_is_fixed: vector(length= num_outputs,dtype= wp.uint8) # 1 is fixed, 0 is free
+        # gradient_is_fixed: vector(length= num_outputs,dtype= wp.uint8) 
         num_nodes:int_dtype
 
     return Face
@@ -100,9 +100,9 @@ def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int
         return TETRA,TETRA_FACE,NODE3D
     
     else:
-        Cell = _create_cell_struct(nodes_per_cell,faces_per_cell,num_outputs,dimension, float_dtype,int_dtype)
-        Face = _create_face_struct(nodes_per_face,num_outputs, dimension,float_dtype,int_dtype)
-        Node = _create_node_struct(num_outputs,dimension,float_dtype,int_dtype)
+        Cell = _create_cell_struct(nodes_per_cell,faces_per_cell,dimension, float_dtype,int_dtype)
+        Face = _create_face_struct(nodes_per_face, dimension,float_dtype,int_dtype)
+        Node = _create_node_struct(dimension,float_dtype,int_dtype)
         return Cell,Face,Node
     
 
@@ -128,7 +128,6 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
                             face_sides:wp.array(dtype=cell_properties.face_side.dtype),
                             nnz_per_cell:wp.array(dtype=cell_properties.nnz_per_cell.dtype),
                             face_offset_index:wp.array(dtype=cell_properties.face_offset_index.dtype),
-                            ,
                             ):
             i = wp.tid()
             cell_structs[i].id = i
@@ -148,8 +147,6 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
         @wp.kernel
         def init_face_structs(face_structs:wp.array(dtype= face_struct),
                             is_boundary_face:wp.array(dtype=face_properties.is_boundary.dtype),
-                            boundary_is_fixed:wp.array(dtype=face_properties.boundary_value_is_fixed.dtype),
-                            gradient_is_fixed:wp.array(dtype=face_properties.gradient_value_is_fixed.dtype),
                             adjacent_cells:wp.array(dtype=face_properties.adjacent_cells.dtype),
                             centroid:wp.array(dtype=face_properties.centroid.dtype),
                             nodes: wp.array(dtype=face_properties.unique_faces.dtype),
@@ -164,8 +161,6 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
             
             face_structs[i].id = i
             face_structs[i].is_boundary = is_boundary_face[i]
-            face_structs[i].value_is_fixed = boundary_is_fixed[i]
-            face_structs[i].gradient_is_fixed = gradient_is_fixed[i]
             face_structs[i].centroid = centroid[i]
             face_structs[i].nodes = nodes[i]
 
@@ -210,8 +205,6 @@ def init_structs(cells:wp.array,faces:wp.array,nodes:wp.array,cell_properties:ce
         wp.launch(kernel=init_face_structs,dim = num_faces,inputs = [
             faces,
             face_properties.is_boundary,
-            face_properties.boundary_value_is_fixed,
-            face_properties.gradient_value_is_fixed,
             face_properties.adjacent_cells,
             face_properties.centroid,
             face_properties.unique_faces,

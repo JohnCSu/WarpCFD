@@ -43,12 +43,10 @@ class DiffusionTerm(Term):
         if isinstance(viscosity,float):
             viscosity = wp.array([viscosity],dtype = fv.float_dtype)
 
-        boundary_face_ids = fv.face_properties.boundary_face_ids
+        boundary_face_ids = fv.boundary_ids
         internal_face_ids = fv.face_properties.internal_face_ids
-        wp.launch(self._calculate_boundary_diffusion_weights_kernel,dim = [boundary_face_ids.shape[0],self.num_outputs], inputs = [boundary_face_ids,viscosity,fv.face_values,fv.face_gradients,fv.cells,fv.faces,self.weights,self.global_output_indices])
+        wp.launch(self._calculate_boundary_diffusion_weights_kernel,dim = [boundary_face_ids.shape[0],self.num_outputs], inputs = [boundary_face_ids,fv.boundary_type,viscosity,fv.face_values,fv.face_gradients,fv.cells,fv.faces,self.weights,self.global_output_indices])
         wp.launch(self._calculate_internal_diffusion_weights_kernel,dim = [internal_face_ids.shape[0],self.num_outputs] ,inputs= [internal_face_ids,viscosity,fv.cell_values,fv.cell_gradients,fv.mass_fluxes,fv.cells,fv.faces,self.weights,self.global_output_indices])
-
-
 
 
 def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
@@ -56,6 +54,7 @@ def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,face_st
     von_neumann_value = float_dtype(von_neumann_value)
     @wp.kernel
     def von_neumann_BC_diffusion_kernel(boundary_ids:wp.array(dtype=int),
+                                        boundary_type:wp.array2d(dtype = wp.uint8),
                                         viscosity:wp.array(dtype=float_dtype),
                                         boundary_values:wp.array2d(dtype = float_dtype),
                                         boudary_gradients:wp.array2d(dtype = float_dtype),
@@ -83,13 +82,14 @@ def create_von_neumann_BC_diffusion_kernel(von_neumann_value,cell_struct,face_st
 def create_dirichlet_BC_kernel(dirichlet_value,cell_struct,face_struct,float_dtype = wp.float32,int_dtype = wp.int32):
     @wp.kernel
     def dirichlet_BC_kernel_BC_diffusion_kernel(boundary_ids:wp.array(dtype=int),
-                                        viscosity:wp.array(dtype=float_dtype),
-                                        boundary_values:wp.array2d(dtype = float_dtype),
-                                        boudary_gradients:wp.array2d(dtype = float_dtype),        
-                                        cell_structs:wp.array(dtype = cell_struct),
-                                        face_structs:wp.array(dtype = face_struct),
-                                        weights:wp.array(ndim=4,dtype=float_dtype),
-                                        output_indices:wp.array(dtype=int_dtype)):
+                                                boundary_type:wp.array2d(dtype = wp.uint8),
+                                                viscosity:wp.array(dtype=float_dtype),
+                                                boundary_values:wp.array2d(dtype = float_dtype),
+                                                boudary_gradients:wp.array2d(dtype = float_dtype),        
+                                                cell_structs:wp.array(dtype = cell_struct),
+                                                face_structs:wp.array(dtype = face_struct),
+                                                weights:wp.array(ndim=4,dtype=float_dtype),
+                                                output_indices:wp.array(dtype=int_dtype)):
         i,_ = wp.tid()
         face_id = boundary_ids[i]
         face = face_structs[face_id]
@@ -114,6 +114,7 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,face_struct,float_dtype = wp
     
     @wp.kernel
     def diffusion_BC_kernel(boundary_ids:wp.array(dtype=int),
+                            boundary_type:wp.array2d(dtype = wp.uint8),
                             viscosity:wp.array(dtype=float_dtype),
                             boundary_values:wp.array2d(dtype = float_dtype),
                             boudary_gradients:wp.array2d(dtype = float_dtype),
@@ -136,7 +137,7 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,face_struct,float_dtype = wp
     
         face_idx = face.cell_face_index[0]
 
-        if face.gradient_is_fixed[global_var_idx]:
+        if boundary_type[i,global_var_idx] == 2: # Gradient BC/ Vonneumann
             weights[owner_cell_id,face_idx,output,0] = float_dtype(0.) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
             weights[owner_cell_id,face_idx,output,1] = float_dtype(0.)
             weights[owner_cell_id,face_idx,output,2] = nu*boudary_gradients[face_id,global_var_idx]*face.area    

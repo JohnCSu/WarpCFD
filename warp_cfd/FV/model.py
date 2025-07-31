@@ -1,18 +1,15 @@
 import warp as wp
-import pyvista as pv
 import numpy as np
-from pyvista import CellType
-from warp.types import vector
+
 from warp import sparse
 
-from warp_cfd.FV.Ops.array_ops import add_1D_array,sub_1D_array,inv_1D_array,to_vector_array,mult_scalar_1D_array,mult_1D_array
+from warp_cfd.FV.Ops.array_ops import to_vector_array
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.cells as Cells
 from warp_cfd.FV.Weights import create_weight_struct
 from warp_cfd.FV.Ops import Mesh_Ops,Matrix_Ops
 from warp_cfd.FV.convergence import Convergence
-from warp_cfd.FV.utils import COO_Arrays
 from warp_cfd.FV.field import Field
 from warp_cfd.FV.Ops.mesh_ops import get_gradient_kernel    
 from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation,upwind
@@ -126,7 +123,11 @@ class FVM():
 
     def init_global_arrays(self):
         
-        
+        self.gradient_is_fixed = self.face_properties.gradient_value_is_fixed
+        self.value_is_fixed = self.face_properties.boundary_value_is_fixed
+        self.boundary_type = self.face_properties.boundary_type
+        self.boundary_ids = self.face_properties.boundary_face_ids
+
         self.cell_values = wp.zeros((self.num_cells,self.num_outputs),dtype = self.float_dtype)
         self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.mesh_ops.vector_type)
         self.face_values = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
@@ -144,7 +145,7 @@ class FVM():
             struct_ = self.face_struct
             arr = self.faces.numpy()
         else:
-            raise ValueError()
+            raise ValueError('Only cell or face struct members can be returned')
         keys = list(struct_.vars.keys())
         index = keys.index(member)
 
@@ -155,8 +156,6 @@ class FVM():
     def get_output_indices(self,output_indices: tuple[int|str] |list[int|str] | wp.array[int] | str | int | None):
         if output_indices is None:
             return self.output_indices  
-        
-                
         if isinstance(output_indices,(int)):
             output_indices = [output_indices]
         elif isinstance(output_indices,str):
@@ -168,15 +167,20 @@ class FVM():
         return wp.array(output_indices,dtype = wp.int32)
             
     def set_boundary_conditions(self):
-        self.mesh_ops.apply_BC(self.face_values,self.face_gradients,self.faces)
+        self.mesh_ops.apply_BC(self.boundary_ids,self.boundary_type,self.face_values,self.face_gradients,self.faces)
 
-    def face_interpolation(self,output_indices: None | list | wp.array = None):
+    def face_interpolation(self,output_indices: None | list | wp.array = None,upwind = False):
         '''
-        Interpolate values to boundary (if von neumann) and internal faces. If output_indices is None, All variables defined in model are interpolated
+        Interpolate values to boundary (if von neumann) and internal faces. If output_indices is None, All variables defined in model are interpolated to faces
         '''
         output_indices = self.get_output_indices(output_indices)
         
-        wp.launch(kernel = self.internal_face_interpolation, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,
+        if upwind:
+            internal_face_interpolation_scheme = self.internal_face_interpolation_upwind
+        else:
+            internal_face_interpolation_scheme = self.internal_face_interpolation
+
+        wp.launch(kernel = internal_face_interpolation_scheme, dim = (self.face_properties.internal_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,
                                                                                                                                                         self.cell_gradients,
                                                                                                                                                         self.mass_fluxes,
                                                                                                                                                         self.face_values,
@@ -184,7 +188,7 @@ class FVM():
                                                                                                                                                         self.cells,
                                                                                                                                                         self.face_properties.internal_face_ids,
                                                                                                                                                         output_indices])
-        wp.launch(kernel = self.boundary_face_interpolation, dim = (self.face_properties.boundary_face_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,self.face_values,self.face_gradients,self.faces,self.cells,self.face_properties.boundary_face_ids,output_indices])
+        wp.launch(kernel = self.boundary_face_interpolation, dim = (self.boundary_ids.shape[0],output_indices.shape[0]), inputs = [self.cell_values,self.face_values,self.face_gradients,self.faces,self.cells,self.boundary_ids,self.boundary_type,output_indices])
     
 
     def calculate_gradients(self,output_indices: None | list | wp.array = None):
