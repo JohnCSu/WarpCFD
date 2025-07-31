@@ -116,8 +116,8 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,face_struct,float_dtype = wp
     def diffusion_BC_kernel(boundary_ids:wp.array(dtype=int),
                             boundary_type:wp.array2d(dtype = wp.uint8),
                             viscosity:wp.array(dtype=float_dtype),
-                            boundary_values:wp.array2d(dtype = float_dtype),
-                            boudary_gradients:wp.array2d(dtype = float_dtype),
+                            face_values:wp.array2d(dtype = float_dtype),
+                            face_gradients:wp.array2d(dtype = float_dtype),
                             cell_structs:wp.array(dtype = cell_struct),
                             face_structs:wp.array(dtype = face_struct),
                             weights:wp.array(ndim=4,dtype=float_dtype),
@@ -140,14 +140,14 @@ def creating_diffusion_BC_scheme_kernel(cell_struct,face_struct,float_dtype = wp
         if boundary_type[i,global_var_idx] == 2: # Gradient BC/ Vonneumann
             weights[owner_cell_id,face_idx,output,0] = float_dtype(0.) # Set the contribtuion to owner to 0 as for boundary term goes to RHS
             weights[owner_cell_id,face_idx,output,1] = float_dtype(0.)
-            weights[owner_cell_id,face_idx,output,2] = nu*boudary_gradients[face_id,global_var_idx]*face.area    
-        else:
+            weights[owner_cell_id,face_idx,output,2] = nu*face_gradients[face_id,global_var_idx]*face.area    
+        else: # Dirichlet
             cell_centroid_to_face_centroid_magnitude = wp.length(cell_structs[owner_cell_id].cell_centroid_to_face_centroid[face_idx])
             weight = nu*(face.area)/cell_centroid_to_face_centroid_magnitude
             
             weights[owner_cell_id,face_idx,output,0] = -weight # Set the contribtuion to owner to 0 as for boundary term goes to RHS
             weights[owner_cell_id,face_idx,output,1] = float_dtype(0.)
-            weights[owner_cell_id,face_idx,output,2] = weight*boundary_values[face_id,global_var_idx]
+            weights[owner_cell_id,face_idx,output,2] = weight*face_values[face_id,global_var_idx]
 
     return diffusion_BC_kernel
 
