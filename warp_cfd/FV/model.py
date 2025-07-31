@@ -6,9 +6,10 @@ from warp import sparse
 from warp_cfd.FV.Ops.array_ops import to_vector_array
 
 from warp_cfd.preprocess import Mesh
-import warp_cfd.FV.cells as Cells
+import warp_cfd.FV.mesh_structs as Cells
 from warp_cfd.FV.Weights import create_weight_struct
 from warp_cfd.FV.Ops import Mesh_Ops,Matrix_Ops
+from warp_cfd.FV.Ops.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.field import Field
 from warp_cfd.FV.Ops.mesh_ops import get_gradient_kernel    
@@ -123,8 +124,9 @@ class FVM():
 
     def init_global_arrays(self):
         
-        self.gradient_is_fixed = self.face_properties.gradient_value_is_fixed
-        self.value_is_fixed = self.face_properties.boundary_value_is_fixed
+        # self.gradient_is_fixed = self.face_properties.gradient_value_is_fixed
+        # self.value_is_fixed = self.face_properties.boundary_value_is_fixed
+        self.boundary_value = self.face_properties.boundary_value
         self.boundary_type = self.face_properties.boundary_type
         self.boundary_ids = self.face_properties.boundary_face_ids
 
@@ -167,7 +169,8 @@ class FVM():
         return wp.array(output_indices,dtype = wp.int32)
             
     def set_boundary_conditions(self):
-        self.mesh_ops.apply_BC(self.boundary_ids,self.boundary_type,self.face_values,self.face_gradients,self.faces)
+        # self.mesh_ops.apply_BC(self.boundary_ids,self.boundary_type,self.face_values,self.face_gradients,self.faces)
+        wp.launch(apply_BC_kernel,dim = (self.boundary_ids.shape[0],self.num_outputs),inputs =[self.face_values,self.face_gradients,self.boundary_value,self.boundary_ids,self.boundary_type])
 
     def face_interpolation(self,output_indices: None | list | wp.array = None,upwind = False):
         '''

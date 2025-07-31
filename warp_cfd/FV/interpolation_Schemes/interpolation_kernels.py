@@ -50,6 +50,6 @@ def boundary_calculate_face_interpolation_kernel(cell_struct,face_struct,float_d
 
         distance = wp.length(owner_cell.cell_centroid_to_face_centroid[cell_face_idx])
 
-        if boundary_types[i,output] == 2 : # We only do face interpolation if the gradient is fixed
+        if boundary_types[i,output] == 2 : # We only do face interpolation if vonNeuman BC
             face_values[face_id,output] = distance*face_gradients[face_id,output] + cell_values[owner_cell.id,output]
     return _boundary_calculate_face_interpolation_kernel

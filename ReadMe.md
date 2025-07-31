@@ -54,7 +54,7 @@ pip install -r requirements.txt
  
 - Add Explicit solver
     - Backpropagation capability
-
+- Mesh module overhaul (spaghetti doesnt begin to describe it)
 ## Far in Future
 - Add LES
 - LBM implementation

@@ -17,25 +17,25 @@ class Mesh_Ops(Ops):
         super().__init__(cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype,int_dtype)
     
     def init(self):
-        @wp.kernel
-        def _apply_BC_kernel(
-                            face_values:wp.array2d(dtype=self.float_dtype),
-                             face_gradients: wp.array2d(dtype=self.float_dtype),
-                            face_struct:wp.array(dtype= self.face_struct),
-                             boundary_condition:wp.array(dtype=self.face_properties.boundary_value.dtype),
-                             gradient_condition:wp.array(dtype=self.face_properties.gradient_value.dtype),
-                             boundary_ids: wp.array(dtype=self.face_properties.boundary_face_ids.dtype),
-                             boundary_types:wp.array2d(dtype=self.face_properties.boundary_type.dtype)):
+        # @wp.kernel
+        # def _apply_BC_kernel(
+        #                     face_values:wp.array2d(dtype=self.float_dtype),
+        #                      face_gradients: wp.array2d(dtype=self.float_dtype),
+        #                     face_struct:wp.array(dtype= self.face_struct),
+        #                      boundary_condition:wp.array(dtype=self.face_properties.boundary_value.dtype),
+        #                      gradient_condition:wp.array(dtype=self.face_properties.gradient_value.dtype),
+        #                      boundary_ids: wp.array(dtype=self.face_properties.boundary_face_ids.dtype),
+        #                      boundary_types:wp.array2d(dtype=self.face_properties.boundary_type.dtype)):
             
-            i,j = wp.tid() # B,num_outputs
+        #     i,j = wp.tid() # B,num_outputs
             
-            face_id = boundary_ids[i]
+        #     face_id = boundary_ids[i]
 
-            if boundary_types[i,j] == 1: # Dirichlet
-                face_values[face_id,j] = boundary_condition[face_id][j]
-                # wp.printf('%d %d %f %f \n',j,face_id,face_struct[face_id].values[j],boundary_condition[face_id][j])
-            elif boundary_types[i,j] == 2: # Von neumann
-                face_gradients[face_id,j] = gradient_condition[face_id][j]
+        #     if boundary_types[i,j] == 1: # Dirichlet
+        #         face_values[face_id,j] = boundary_condition[face_id][j]
+        #         # wp.printf('%d %d %f %f \n',j,face_id,face_struct[face_id].values[j],boundary_condition[face_id][j])
+        #     elif boundary_types[i,j] == 2: # Von neumann
+        #         face_gradients[face_id,j] = gradient_condition[face_id][j]
 
 
         @wp.kernel
@@ -162,7 +162,7 @@ class Mesh_Ops(Ops):
             else: # means is neighbor side of face so set to -ve
                 wp.atomic_add(div_u,i,-mass_fluxes[face_id])
 
-        self._apply_BC = _apply_BC_kernel
+        # self._apply_BC = _apply_BC_kernel
         # self._apply_cell_value = _apply_cell_value_kernel
         self._set_initial_conditions = _set_initial_conditions_kernel
 

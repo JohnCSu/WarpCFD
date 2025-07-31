@@ -20,7 +20,7 @@ class SIMPLE():
 
         self.vel_equation = Matrix(model,fields = velocity_vars)
 
-        self.p_correction_diffusion = DiffusionTerm(model,'p',need_global_index= True,von_neumann= 0.,correction=correction)
+        self.p_correction_diffusion = DiffusionTerm(model,'p',correction=correction)
         self.p_corr_equation = Matrix(model,fields = 'p',solver = linear.cg)
 
         self.vel_correction = wp.zeros(shape=(model.num_cells,3),dtype=float)
@@ -88,7 +88,7 @@ class SIMPLE():
                 p_corr_equation.form_system(p_correction_diffusion,fvm = model)
                 p_corr_equation.add_RHS(div_u)
                 p_corr_equation.replace_row(0,0.)
-                
+                print('p\n',p_corr_equation.dense)
                 inner_loop_result,p_cor = p_corr_equation.solve_Axb()
 
                 model.relax(p_cor,alpha = self.p_relaxation_factor, output_index= 3)

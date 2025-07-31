@@ -9,7 +9,7 @@ from warp_cfd.preprocess import Mesh
 from warp_cfd.preprocess import create_2D_grid,Mesh,define_boundary_walls
 import pyvista as pv
 
-# wp.config.mode = "debug
+wp.config.mode = "debug"
 '''
 LDC example for Re = 100 run for 2000 iterations for Hex mesh example. Here Othrogonal correctors are turned off as it is essentially a cartesian grid
 '''
@@ -17,7 +17,7 @@ if __name__ == '__main__':
     wp.init()
     # wp.clear_kernel_cache()
     np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
-    n = 41 # Approximate number of cells in x and y direction
+    n = 3# Approximate number of cells in x and y direction
     w,l = 1.,1.
     Re = 100
     G,nu = 1,1/Re
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     # model.set_initial_conditions(wp.array(IC))
 
     solver = SIMPLE(model,0.7,0.3,correction=False)
-    solver.run(2000,100)
+    solver.run(3,1)
 
     # exit()
     from matplotlib import pyplot as plt
