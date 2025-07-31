@@ -1,6 +1,6 @@
 import warp as wp
 from typing import Any
-from warp_cfd.FV.mesh_structs import HEX,HEX_FACE,WEDGE,WEDGE_FACE,TETRA,TETRA_FACE
+
 from warp.types import vector
 @wp.kernel
 def apply_BC_kernel(
