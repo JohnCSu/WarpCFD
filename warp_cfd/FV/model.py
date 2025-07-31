@@ -9,7 +9,7 @@ from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.mesh_structs as Cells
 from warp_cfd.FV.Weights import create_weight_struct
 from warp_cfd.FV.Ops import Mesh_Ops,Matrix_Ops
-from warp_cfd.FV.Ops.conditions import apply_BC_kernel,set_initial_conditions_kernel
+from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.field import Field
 from warp_cfd.FV.Ops.mesh_ops import get_gradient_kernel    
@@ -118,14 +118,17 @@ class FVM():
         self.matrix_ops.init()        
         self.init_global_arrays()
     
-    def set_initial_conditions(self,IC):
-        self.mesh_ops.set_initial_conditions(IC,self.cell_values)
+    def set_initial_conditions(self,IC:wp.array,output_indices = None):
+        cell_values = self.cell_values
+        if output_indices is None:
+            output_indices = wp.array([i for i in range(IC.shape[-1])],dtype = self.int_dtype)
+        wp.launch(kernel= set_initial_conditions_kernel, dim = [cell_values.shape[0],len(output_indices)],inputs= [IC,cell_values,output_indices])
+        # self.mesh_ops.set_initial_conditions(IC,self.cell_values)
+        # wp.launch(,)
 
 
     def init_global_arrays(self):
         
-        # self.gradient_is_fixed = self.face_properties.gradient_value_is_fixed
-        # self.value_is_fixed = self.face_properties.boundary_value_is_fixed
         self.boundary_value = self.face_properties.boundary_value
         self.boundary_type = self.face_properties.boundary_type
         self.boundary_ids = self.face_properties.boundary_face_ids
