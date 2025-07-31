@@ -28,9 +28,6 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,dimension:int = 3,
         '''(F,) vector'''
         cell_centroid_to_face_centroid: mat(shape = (faces_per_cell,dimension),dtype=float_dtype)
         '''(F,D) matrix with D Vector containg the distance from the cell centroid to the corresponding face centroid'''
-        
-        # mass_fluxes: vector(length=faces_per_cell,dtype = float_dtype)
-        # ''' Store the flux dot(u,n)*A'''
         face_sides: vector(length=faces_per_cell,dtype = int_dtype)
         '''(F) Vector indicating for the face which side of the face it is on (0 or 1 side)'''
 
@@ -40,10 +37,6 @@ def _create_cell_struct(nodes_per_cell:int,faces_per_cell:int,dimension:int = 3,
         '''Number of non zero coeff (Num neighbors + 1) for each velocity component'''
         face_offset_index:vector(length=faces_per_cell,dtype= int_dtype)
         '''vector indicating the offset index for a given face. 0 if boundary'''
-
-        # values: vector(length=num_outputs,dtype = float_dtype)
-        # gradients: mat(shape = (num_outputs,dimension),dtype= float_dtype)
-        # value_is_fixed:vector(length=num_outputs,dtype = wp.uint8)
     return Cell
 
 
@@ -79,27 +72,64 @@ def _create_node_struct(dimension:int = 3, float_dtype = wp.float32,int_dtype = 
     return Node
     
 
-NODE3D = _create_node_struct(dimension=3)
+NODE3D_F32 = _create_node_struct(dimension=3)
 
-HEX = _create_cell_struct(nodes_per_cell=8,faces_per_cell=6)
-HEX_FACE = _create_face_struct(nodes_per_face=4)
+HEX_F32 = _create_cell_struct(nodes_per_cell=8,faces_per_cell=6)
+HEX_FACE_F32 = _create_face_struct(nodes_per_face=4)
 
-TETRA = _create_cell_struct(nodes_per_cell=4,faces_per_cell=3)
-TETRA_FACE = _create_face_struct(nodes_per_face=3)
+TETRA_F32 = _create_cell_struct(nodes_per_cell=4,faces_per_cell=3)
+TETRA_FACE_F32 = _create_face_struct(nodes_per_face=3)
 
-WEDGE = _create_cell_struct(nodes_per_cell=6,faces_per_cell=5)
-WEDGE_FACE = _create_face_struct(nodes_per_face=4)
+WEDGE_F32 = _create_cell_struct(nodes_per_cell=6,faces_per_cell=5)
+WEDGE_FACE_F32 = _create_face_struct(nodes_per_face=4)
 
 
-def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int,num_outputs = 4,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
+NODE3D_F64 = _create_node_struct(dimension=3,float_dtype=wp.float64)
+
+HEX_F64 = _create_cell_struct(nodes_per_cell=8,faces_per_cell=6,float_dtype=wp.float64)
+HEX_FACE_F64 = _create_face_struct(nodes_per_face=4,float_dtype=wp.float64)
+
+TETRA_F64 = _create_cell_struct(nodes_per_cell=4,faces_per_cell=3,float_dtype=wp.float64)
+TETRA_FACE_F64 = _create_face_struct(nodes_per_face=3,float_dtype=wp.float64)
+
+WEDGE_F64 = _create_cell_struct(nodes_per_cell=6,faces_per_cell=5,float_dtype=wp.float64)
+WEDGE_FACE_F64 = _create_face_struct(nodes_per_face=4,float_dtype=wp.float64)
+
+CELL_DICT = {
+    'HEX_F32':(HEX_F32,HEX_FACE_F32,NODE3D_F32),
+    'WEDGE_F32':(WEDGE_F32,WEDGE_FACE_F32,NODE3D_F32),
+    'TETRA_F32':(TETRA_F32,TETRA_FACE_F32,NODE3D_F32),
+
+    'HEX_F64':(HEX_F64,HEX_FACE_F64,NODE3D_F64),
+    'WEDGE_F64':(WEDGE_F64,WEDGE_FACE_F64,NODE3D_F64),
+    'TETRA_F64':(TETRA_F64,TETRA_FACE_F64,NODE3D_F64),
+}
+'''
+Dictionary of available cell structs each key is the cell type + floating point dtype and the value is a tuple corresponding to the Cell, Face and node struct
+'''
+
+
+def create_mesh_structs(nodes_per_cell:int,faces_per_cell:int,nodes_per_face:int,dimension:int = 3, float_dtype = wp.float32,int_dtype = wp.int32):
     assert int_dtype == wp.int32, 'only 32bit int is supported'
 
-    if nodes_per_cell == 8 and faces_per_cell == 8 and dimension == 3 and nodes_per_face == 4:
-        return HEX,HEX_FACE,NODE3D
-    elif nodes_per_cell == 4 and faces_per_cell == 3 and num_outputs == 4 and dimension ==3 and nodes_per_face == 3:
-        return TETRA,TETRA_FACE,NODE3D
-    
+    if nodes_per_cell == 8 and faces_per_cell == 6  and nodes_per_face == 4:
+        if float_dtype == wp.float32:
+            return CELL_DICT['HEX_F32']
+        else:
+            return CELL_DICT['HEX_F64']
+    elif nodes_per_cell == 4 and faces_per_cell == 3  and nodes_per_face == 3:
+        if float_dtype == wp.float32:
+            return CELL_DICT['TETRA_F32']
+        elif float_dtype == wp.float64:
+            return CELL_DICT['TETRA_F64']
+    elif nodes_per_cell == 6 and faces_per_cell == 5  and nodes_per_face == 3:
+        if float_dtype == wp.float32:
+            return CELL_DICT['WEDGE_F32']
+        elif float_dtype == wp.float64:
+            return CELL_DICT['WEDGE_F64']
+        
     else:
+        raise ValueError('Only wedge, tets and hex cells are supported')
         Cell = _create_cell_struct(nodes_per_cell,faces_per_cell,dimension, float_dtype,int_dtype)
         Face = _create_face_struct(nodes_per_face, dimension,float_dtype,int_dtype)
         Node = _create_node_struct(dimension,float_dtype,int_dtype)
