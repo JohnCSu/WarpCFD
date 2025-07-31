@@ -11,12 +11,12 @@ def apply_BC_kernel(
                     boundary_types:wp.array2d(dtype=wp.uint8)):
 
     i,j = wp.tid() # B,num_outputs
-    
+    boundary_id = boundary_ids[i]
     if boundary_types[i,j] == 1: # Dirichlet
-        face_values[i,j] = boundary_value[i,j]
+        face_values[boundary_id,j] = boundary_value[i,j]
         # wp.printf('%d %d %f %f \n',j,face_id,face_struct[face_id].values[j],boundary_condition[face_id][j])
     elif boundary_types[i,j] == 2: # Von neumann
-        face_gradients[i,j] = boundary_value[i,j]
+        face_gradients[boundary_id,j] = boundary_value[i,j]
 
 
 for T in [wp.float32,wp.float64]:

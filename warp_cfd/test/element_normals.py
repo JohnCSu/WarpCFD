@@ -2,11 +2,11 @@ from warp_cfd.preprocess.grid import create_2D_grid
 from warp_cfd.preprocess.mesh import Mesh
 import pyvista as pv
 import numpy as np
-n = 31
-pv_mesh = create_2D_grid((0,0,0),n,n,1,1,element_type= 'tet',unstructured_wedge = False,display_mesh=False)
+n = 3
+pv_mesh = create_2D_grid((0,0,0),n,n,1,1,element_type= 'hex',unstructured_wedge = False,display_mesh=False)
 show_cell_ids = False
 show_nodes = False
-show_face_normals = False
+show_face_normals = True
 m = Mesh(pv_mesh)
 face_ids = m.cell_properties.faces
 normals = m.cell_properties.normal

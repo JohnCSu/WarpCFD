@@ -17,7 +17,7 @@ if __name__ == '__main__':
     wp.init()
     # wp.clear_kernel_cache()
     np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
-    n = 3# Approximate number of cells in x and y direction
+    n = 41# Approximate number of cells in x and y direction
     w,l = 1.,1.
     Re = 100
     G,nu = 1,1/Re
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     # model.set_initial_conditions(wp.array(IC))
 
     solver = SIMPLE(model,0.7,0.3,correction=False)
-    solver.run(3,1)
+    solver.run(2000,100)
 
     # exit()
     from matplotlib import pyplot as plt

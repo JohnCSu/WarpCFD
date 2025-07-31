@@ -62,7 +62,8 @@ class SIMPLE():
             # print('u\n',vel_equation.dense[::3,::3])
             vel_equation.relax(self.u_relaxation_factor,model)
             # 
-            # print('v\n',vel_equation.dense[1::3,1::3])
+            # print('v\n',vel_equation.dense[0::3,0::3])
+            # print('v\n',vel_equation.rhs.numpy()[::3])
             Ap = vel_equation.diagonal
             outer_loop_result,vel_array = vel_equation.solve_Axb(vel_array)
             # print(vel_array[::3])
@@ -88,7 +89,7 @@ class SIMPLE():
                 p_corr_equation.form_system(p_correction_diffusion,fvm = model)
                 p_corr_equation.add_RHS(div_u)
                 p_corr_equation.replace_row(0,0.)
-                print('p\n',p_corr_equation.dense)
+                # print('p\n',p_corr_equation.dense)
                 inner_loop_result,p_cor = p_corr_equation.solve_Axb()
 
                 model.relax(p_cor,alpha = self.p_relaxation_factor, output_index= 3)
