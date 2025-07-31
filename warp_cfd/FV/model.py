@@ -93,8 +93,7 @@ class FVM():
         self.faces_per_cell = self.cell_properties.faces_per_cell
         self.nodes_per_face = self.cell_properties.nodes_per_face
 
-        self.cell_struct,self.face_struct,self.node_struct= Cells.create_mesh_structs(self.nodes_per_cell,self.faces_per_cell,self.nodes_per_face,self.num_outputs,self.dimension,self.float_dtype,self.int_dtype)
-        self.weight_struct = create_weight_struct(self.float_dtype)
+        self.cell_struct,self.face_struct,self.node_struct= Cells.create_mesh_structs(self.nodes_per_cell,self.faces_per_cell,self.nodes_per_face,self.dimension,self.float_dtype,self.int_dtype)
         self.cells = wp.zeros(shape=self.num_cells,dtype= self.cell_struct)
         '''Array of cell structs for storing information about cell dependent values'''
         self.faces = wp.zeros(shape = self.num_faces,dtype=self.face_struct)
@@ -241,7 +240,6 @@ class FVM():
         arr.zero_()
         # self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,arr)
         wp.launch(kernel=model_ops.divFlux_kernel, dim = (self.num_cells,self.faces_per_cell),inputs = [self.mass_fluxes,self.cells,arr])
-
         return arr
     
 
