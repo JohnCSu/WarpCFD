@@ -2,19 +2,20 @@ import warp as wp
 import numpy as np
 
 from warp import sparse
-
+from warp.types import vector
 from warp_cfd.FV.Ops.array_ops import to_vector_array
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.mesh_structs as Cells
 from warp_cfd.FV.Weights import create_weight_struct
-from warp_cfd.FV.Ops import Mesh_Ops,Matrix_Ops
+from warp_cfd.FV.Ops import Matrix_Ops
 from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.field import Field
-from warp_cfd.FV.Ops.mesh_ops import get_gradient_kernel    
+from warp_cfd.FV.Ops import model_ops
 from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation,upwind
 from typing import Any
+
 # wp.config.verify_fp = True
 '''
 TODO:
@@ -58,6 +59,7 @@ class FVM():
         self.dimension:int = mesh.dimension
         self.float_dtype = float_dtype
         self.int_dtype = int_dtype
+        self.vector3d_dtype = vector(3,dtype=self.float_dtype)
         self.cellType = mesh.cellType
         self.mesh = mesh
         assert mesh.num_outputs == len(output_variables), 'Number of defined output variables must match number of outputs given in mesh'
@@ -104,7 +106,7 @@ class FVM():
 
         Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.weight_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
 
-        self.mesh_ops = Mesh_Ops(*Ops_args)
+        
         self.matrix_ops = Matrix_Ops(*Ops_args)
         
     
@@ -114,7 +116,6 @@ class FVM():
         self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
         self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
         self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype) 
-        self.mesh_ops.init()
         self.matrix_ops.init()        
         self.init_global_arrays()
     
@@ -134,7 +135,7 @@ class FVM():
         self.boundary_ids = self.face_properties.boundary_face_ids
 
         self.cell_values = wp.zeros((self.num_cells,self.num_outputs),dtype = self.float_dtype)
-        self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.mesh_ops.vector_type)
+        self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.vector3d_dtype)
         self.face_values = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
         self.face_gradients = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
         self.mass_fluxes = wp.zeros(shape = (self.num_faces),dtype= self.float_dtype)
@@ -203,8 +204,8 @@ class FVM():
         '''
         output_indices = self.get_output_indices(output_indices)        
         self.cell_gradients.zero_()
-        self.mesh_ops.calculate_gradients(self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,output_indices)
 
+        wp.launch(kernel=model_ops.calculate_gradients_kernel,dim = (self.num_cells,self.faces_per_cell,len(output_indices)),inputs = [self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,output_indices])
 
     
     def get_gradient(self,output_index: str | int,coeff = 1.):
@@ -217,7 +218,7 @@ class FVM():
         gradient_array = wp.array2d(shape = (self.num_cells,3),dtype = self.float_dtype)
         if isinstance(coeff,float):
             coeff = wp.array([coeff],dtype= self.float_dtype)
-        wp.launch(get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,output_index] )
+        wp.launch(model_ops.get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,output_index] )
         
         return gradient_array
     
@@ -230,15 +231,20 @@ class FVM():
         wp.launch(explicit_relax,dim = self.num_cells, inputs = [self.cell_values,new_value,alpha,output_index])
 
     def calculate_mass_flux(self):
-        self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
+        # self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
+        wp.launch(kernel = model_ops.calculate_mass_flux_kernel,dim = (self.mass_fluxes.shape[0]),inputs = [self.mass_fluxes,self.face_values,self.cells,self.faces,])
        
 
     def divFlux(self,arr = None):
         if arr is None:
             arr = wp.zeros(shape = self.cells.shape[0],dtype= self.float_dtype)
         arr.zero_()
-        self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,arr)
+        # self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,arr)
+        wp.launch(kernel=model_ops.divFlux_kernel, dim = (self.num_cells,self.faces_per_cell),inputs = [self.mass_fluxes,self.cells,arr])
+
         return arr
+    
+
     def check_convergence(self,vel_matrix:sparse.BsrMatrix,velocity:wp.array,b:wp.array,div_u=None,velocity_correction:wp.array=None,p_correction:wp.array=None,log = True):
         '''
         Checks the following:
@@ -247,7 +253,7 @@ class FVM():
         pressure correction residual
         '''
         l2_norm =  lambda Ax,b :np.linalg.norm(Ax-b,ord = 2)
-        div_u = self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,div_u)
+        div_u = self.divFlux(div_u)
         Ax:wp.array = sparse.bsr_mv(vel_matrix,velocity)
 
         Ax = Ax.numpy().reshape(-1,3)
