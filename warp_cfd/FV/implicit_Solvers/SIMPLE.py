@@ -88,7 +88,9 @@ class SIMPLE():
 
                 p_corr_equation.form_system(p_correction_diffusion,fvm = model)
                 p_corr_equation.add_RHS(div_u)
-                p_corr_equation.replace_row(0,0.)
+
+                if model.reference_pressure_cell_id is not None:
+                    p_corr_equation.replace_row(model.reference_pressure_cell_id,model.reference_pressure)
                 # print('p\n',p_corr_equation.dense)
                 inner_loop_result,p_cor = p_corr_equation.solve_Axb()
 

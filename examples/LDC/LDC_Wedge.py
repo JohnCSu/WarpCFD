@@ -44,9 +44,10 @@ if __name__ == '__main__':
     m.set_cell_value(0,p= 0)
     
     model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
-    model.init_step()
+    model.set_reference_pressure(0,0.)
     centroids = model.struct_member_to_array('centroid','cells')
-    
+
+
     IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)
     IC[-1,:] = 0.
     # model.set_initial_conditions(wp.array(IC))

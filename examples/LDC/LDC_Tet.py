@@ -41,10 +41,9 @@ if __name__ == '__main__':
     m.set_gradient_value('+Y',p = 0) # Velocity Inlet
     m.set_gradient_value('-Y',p = 0) # Velocity Inlet
     
-    m.set_cell_value(0,p= 0)
     
     model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
-    model.init_step()
+    model.set_reference_pressure(0,0.)
     centroids = model.struct_member_to_array('centroid','cells')
     
     IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)

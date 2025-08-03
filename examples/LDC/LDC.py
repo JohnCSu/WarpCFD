@@ -44,7 +44,7 @@ if __name__ == '__main__':
     m.set_cell_value(0,p= 0)
     
     model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
-    model.init_step()
+    model.set_reference_pressure(0,0.)
     centroids = model.struct_member_to_array('centroid','cells')
 
     solver = SIMPLE(model,0.7,0.3,correction=False)

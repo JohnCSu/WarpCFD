@@ -107,10 +107,14 @@ class FVM():
 
         self.matrix_ops = Matrix_Ops(*Ops_args)
         
-    
+        self.reference_pressure_cell_id = None
+        self.reference_pressure = 0.
+
+
+        self.init_step()
+
     def init_step(self):
         Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
-
         self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
         self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
         self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype) 
@@ -125,6 +129,9 @@ class FVM():
         # self.mesh_ops.set_initial_conditions(IC,self.cell_values)
         # wp.launch(,)
 
+    def set_reference_pressure(self,cell_id:int,value:float = 0.):
+        self.reference_pressure_cell_id = cell_id
+        self.reference_pressure = float(value)
 
     def init_global_arrays(self):
         
