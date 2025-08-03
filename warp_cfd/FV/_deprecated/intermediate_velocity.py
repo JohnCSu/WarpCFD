@@ -4,7 +4,7 @@ from warp_cfd.FV.deprecated.weight_ops import Weights_Ops
 from warp_cfd.FV.Ops.matrix_ops import Matrix_Ops
 from warp import sparse
 from warp_cfd.FV.utils import COO_Arrays
-from warp_cfd.FV.Ops.array_ops import inv_1D_array,mult_scalar_1D_array,add_1D_array,sub_1D_array
+from warp_cfd.FV.deprecated.array_ops import inv_1D_array,mult_scalar_1D_array,add_1D_array,sub_1D_array
 
 class intermediate_velocity_step():
     def __init__(self,mesh_ops:Mesh_Ops,weight_ops:Weights_Ops,matrix_ops:Matrix_Ops) -> None:

@@ -5,7 +5,7 @@ from warp_cfd.FV.Ops import Matrix_Ops
 from warp_cfd.FV.Ops import Pressure_correction_Ops
 from warp import sparse
 from warp_cfd.FV.utils import COO_Arrays
-from warp_cfd.FV.Ops.array_ops import inv_1D_array,mult_1D_array,mult_scalar_1D_array,add_1D_array
+from warp_cfd.FV.deprecated.array_ops import inv_1D_array,mult_1D_array,mult_scalar_1D_array,add_1D_array
 import numpy as np
 
 class pressure_correction_step():
