@@ -32,14 +32,14 @@ pip install -r requirements.txt
 ```
 
 
+
 # RoadMap (In hopeful order)
 - ~~Implement SIMPLE loop~~  
-- Add Pressure inlet/outlet
+- ~~Add Pressure inlet/outlet~~ (Backflow needs to be added)
 - ~~Add And Test Tetra Elements~~
 - ~~Add And Test Wedge Elements~~
 - ~~Implement Skewness corrections~~
-- Orthogonal Correctors (Use over relaxed approach but may change)
-
+- ~~Orthogonal Correctors For Laplacian~~ (No skewness correction)
 
 - Add unsteady flow
     - Pseudo Transient
@@ -55,6 +55,12 @@ pip install -r requirements.txt
 - Add Explicit solver
     - Backpropagation capability
 - Mesh module overhaul (spaghetti doesnt begin to describe it)
+
+## Things to add to streamline things (as new Warp tooling comes out)
+- wp.indexedarray for zero copy views|slices (useful)
+- How numpy struct access works
+
+
 ## Far in Future
 - Add LES
 - LBM implementation
