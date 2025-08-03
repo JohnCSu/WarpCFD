@@ -3,7 +3,6 @@ from typing import Any
 from warp_cfd.FV.utils import COO_Arrays
 from warp.optim import linear
 import warp.sparse as sparse
-from warp_cfd.FV.Ops.array_ops import sub_1D_array
 from .ops_class import Ops
 class Matrix_Ops(Ops):
     def __init__(self,cell_struct,face_struct,node_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):
@@ -260,9 +259,7 @@ class Matrix_Ops(Ops):
     def form_p_grad_vector(self,grad_P,cell_gradients,cells,density):
         wp.launch(kernel=self._form_p_grad_vector_kernel, dim = [cells.shape[0],self.dimension], inputs = [grad_P,cell_gradients,cells,density])
         
-    
-    def get_b_vector(self,H,grad_P,b):
-        sub_1D_array(H,grad_P,b)
+
     
     def solve_Axb(self,A:sparse.BsrMatrix,x:wp.array,b:wp.array,linear_solver,tol = 1.e-7,max_iter = 500):
         M = linear.preconditioner(A)

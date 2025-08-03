@@ -3,11 +3,10 @@ import numpy as np
 
 from warp import sparse
 from warp.types import vector
-from warp_cfd.FV.Ops.array_ops import to_vector_array
+from warp_cfd.FV.utils import to_vector_array
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.mesh_structs as Cells
-from warp_cfd.FV.Weights import create_weight_struct
 from warp_cfd.FV.Ops import Matrix_Ops
 from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence

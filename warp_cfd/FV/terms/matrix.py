@@ -2,12 +2,10 @@ import warp as wp
 from warp_cfd.FV.model import FVM
 from warp_cfd.FV.utils import COO_Arrays
 import warp.sparse as sparse
-from warp_cfd.FV.Ops.matrix_ops import Matrix_Ops
 from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.field import Field
 from warp.optim import linear
 from warp_cfd.FV.utils import bsr_to_coo_array
-from warp_cfd.FV.utils import green_gauss_gradient
 
 class Matrix():
     def __init__(self,fvm:FVM,fields:str| list[str],solver = linear.bicgstab) -> None:

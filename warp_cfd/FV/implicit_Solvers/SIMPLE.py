@@ -4,8 +4,7 @@ import numpy as np
 from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Matrix
 from warp_cfd.FV.field import Field
 import warp as wp
-from warp_cfd.FV.Ops.array_ops import sub_1D_array,add_1D_array,div_1D_array
-from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA,get_HbyA,divFlux
+from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA,get_HbyA
 from warp.types import vector
 from warp.optim import linear
 class SIMPLE():
@@ -36,7 +35,7 @@ class SIMPLE():
         self.rUA = wp.zeros(shape= model.cells.shape[0],dtype= model.float_dtype)
         self.rUA_faces = wp.zeros(shape= model.faces.shape[0],dtype= model.float_dtype)
         self.HbyA_faces = wp.zeros(shape=model.faces.shape[0],dtype = vector(3,dtype=model.float_dtype))
-    def run(self,num_steps,steps_per_check = 10,*,rhie_chow = True):
+    def run(self,num_steps,steps_per_check = 10):
         model = self.model
         convection = self.convection
         diffusion = self.diffusion
@@ -48,6 +47,7 @@ class SIMPLE():
         HbyA = self.HbyA
         rUA = self.rUA 
         rUA_faces = self.rUA_faces
+
         for i in range(num_steps):
             model.set_boundary_conditions()
             model.face_interpolation()
@@ -100,7 +100,8 @@ class SIMPLE():
                 model.calculate_gradients('p')
                 vel_correction = model.get_gradient('p',coeff = rUA).flatten()
                 
-                sub_1D_array(HbyA,vel_correction,HbyA)
+                HbyA -= vel_correction
+                # sub_1D_array(HbyA,vel_correction,HbyA)
                 model.replace_cell_values(['u','v','w'],HbyA)
                 
 

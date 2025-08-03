@@ -92,9 +92,6 @@ def divFlux(cell_value:wp.array,model):
 
 
 
-
-
-
 def calculate_rUA(Ap:wp.array,cells:wp.array,out:wp.array | None = None):
 
     '''
