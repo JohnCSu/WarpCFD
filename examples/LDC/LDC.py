@@ -2,7 +2,6 @@
 from warp_cfd.FV.model import FVM
 import numpy as np
 import warp as wp
-from warp_cfd.FV.Ops.array_ops import sub_1D_array
 from warp_cfd.FV.implicit_Solvers import SIMPLE
 from warp_cfd.preprocess import Mesh
 
