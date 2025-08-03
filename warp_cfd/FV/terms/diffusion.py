@@ -27,11 +27,11 @@ class DiffusionTerm(Term):
         assert not ((von_neumann is not None) and (dirchlet is not None)), 'von neumann and dirichlet settings cannot both be not None'
         
         if von_neumann is not None:
-            assert len(self.fields) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'
-            
+            assert len(self.fields) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'    
             self._calculate_boundary_diffusion_weights_kernel = create_von_neumann_BC_diffusion_kernel(von_neumann,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
         elif dirchlet is not None:
             assert len(self.fields) == 1 ,'Von neumann or dirichlet option only valid if len of field == 1'
+            
             self._calculate_boundary_diffusion_weights_kernel = create_von_neumann_BC_diffusion_kernel(dirchlet,fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)
         else:
             self._calculate_boundary_diffusion_weights_kernel = creating_diffusion_BC_scheme_kernel(fv.cell_struct,fv.face_struct,self.float_dtype,self.int_dtype)

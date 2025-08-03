@@ -102,10 +102,9 @@ class FVM():
         '''Array of node structs for storing inforation about nodes (mainly id and coordinates)'''
 
         self.face_viscosity = None
-
-        Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.weight_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
-
         
+        Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
+
         self.matrix_ops = Matrix_Ops(*Ops_args)
         
     

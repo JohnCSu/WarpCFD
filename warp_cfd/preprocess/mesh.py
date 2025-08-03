@@ -117,11 +117,12 @@ class Mesh():
                 # Step 3: Reshape the array to have shape (num_cells*4, N), where each row is a face.
                 faces_reshaped = faces_sorted.reshape(-1, face_idx.shape[-1])
 
-                # Step 4: Use np.unique to get the unique faces along axis=0.
+                # Step 4: Use np.unique to get the unique faces along axis=0. inverse=True gets us a mapping from cell id to face id
                 unique_faces, cell_face_ids = np.unique(faces_reshaped, axis=0, return_inverse=True)
 
                 cell_face_ids = cell_face_ids.reshape(self.cells.shape[0], face_idx.shape[0])
                 cell_face_ids = cell_face_ids.astype(dtype=self.int_dtype) # Watch this line carefully
+
 
                 face_areas,face_normals = self.calculate_face_normal_and_area(faces,self.nodes)
                 face_centroid = self.nodes[unique_faces].mean(axis=1)
@@ -204,6 +205,18 @@ class Mesh():
         return np.unique(np.sort(cell_neighbors,axis= -1),axis = 0)
     
 
+    # def get_Neighbors(self,cell_face_ids):
+    #     seen_cells = set()
+    #     cells_to_search = 0
+    #     num_cells = cell_face_ids.shape[0]
+    #     while len(seen_cells < num_cells):
+    #         for cell_id in cells_to_search:
+    #             seen_cells.add(cell_id)
+    #             n_list = self.pyvista_mesh.cell_neighbors(cell_id,connections='faces')
+    #             for n_id in n_list:
+    #                 faces_i,faces_j = cell_face_ids[i],cell_face_ids[j]
+    #                 intersect_face_id,face_i_ind, face_j_ind = np.intersect1d(faces_i,faces_j,return_indices= True)
+    
     def get_mesh_properties(self):
         cell_neighbors = self.get_neighbors()
         unique_faces,cell_face_ids,face_areas,face_normals,nodes_per_face,face_centroid,to_face_distance = self.get_faces()

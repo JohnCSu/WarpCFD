@@ -9,6 +9,8 @@ def create_2D_grid(origin,nx,ny,dx,dy,dz = 0.1,*,element_type = 'hex',unstructur
     '''
     Create a 3D grid with a single element in the z direction to represent a 2D grid in 3D space returns a pyvista Undstructured Grid.
 
+    This thing was vibe coded so dont ask me how it works just that it does.
+    
     Supports
     - Structured Hex and Wedge elements
     - Unstructured wedge elements

@@ -91,7 +91,7 @@ def calculate_gradients_kernel(face_values:wp.array2d(dtype=Any),
     wp.atomic_add(cell_gradients,i,output,vec)
 
 for key,(cell_struct,face_struct,node_struct) in CELL_DICT.items():
-    float_type = wp.float32 if 'F32' else wp.float64
+    float_type = wp.float32 if 'F32' in key else wp.float64
     wp.overload(calculate_gradients_kernel,{"cell_gradients":wp.array2d(dtype = vector(3,dtype=float_type)),
                                         "face_values": wp.array2d(dtype = float_type),
                                         "cell_structs":wp.array(dtype=cell_struct),
@@ -99,28 +99,3 @@ for key,(cell_struct,face_struct,node_struct) in CELL_DICT.items():
                                         "node_structs":wp.array(dtype= node_struct),
                                         "output_indices":wp.array(dtype=wp.int32),})
 
-
-
-
-
-
-@wp.kernel
-def calculate_gradients_kernel(face_values:wp.array2d(dtype=Any),
-                                cell_gradients:wp.array2d(dtype = Any),
-                                cell_structs:wp.array(dtype = Any),
-                                face_structs:wp.array(dtype = Any),
-                                node_structs:wp.array(dtype= Any),
-                                output_indices:wp.array(dtype=wp.int32),
-                                ):
-    #Lets Use Gauss Linear from openFoam for now
-    i,face_idx,output_idx = wp.tid() #C, faces_per_cell, num_outputs
-    output = output_indices[output_idx]
-
-    face_id = cell_structs[i].faces[face_idx]
-
-    area = face_structs[face_id].area
-    normal = cell_structs[i].face_normal[face_idx]
-    volume = cell_structs[i].volume
-    vec = face_values[face_id,output]*area*normal/volume
-    # wp.printf('%f %f %f\n',vec[0],vec[1],vec[2])
-    wp.atomic_add(cell_gradients,i,output,vec)
