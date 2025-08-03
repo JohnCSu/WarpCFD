@@ -6,8 +6,8 @@ import warp.sparse as sparse
 from warp_cfd.FV.Ops.array_ops import sub_1D_array
 from .ops_class import Ops
 class Matrix_Ops(Ops):
-    def __init__(self,cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):
-        super().__init__(cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype,int_dtype)
+    def __init__(self,cell_struct,face_struct,node_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):
+        super().__init__(cell_struct,face_struct,node_struct,cell_properties,face_properties,num_outputs,float_dtype,int_dtype)
     
     def init(self):
         
