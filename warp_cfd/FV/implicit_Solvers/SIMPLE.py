@@ -24,14 +24,14 @@ class SIMPLE():
 
         self.vel_correction = wp.zeros(shape=(model.num_cells,3),dtype=float)
 
-        self.vel_array = wp.zeros(shape=(model.num_cells*3),dtype=model.float_dtype)
-
+        
         self.p_relaxation_factor = p_relaxation_factor
         self.u_relaxation_factor = u_relaxation_factor
         self.NUM_INNER_LOOPS = 1
 
-        self.HbyA = wp.zeros_like(self.vel_array)
-        self.grad_P_HbyA = wp.zeros_like(self.vel_array)
+        
+        self.HbyA = wp.zeros(shape=(model.num_cells*3),dtype=model.float_dtype)
+        # self.grad_P_HbyA = wp.zeros_like(self.vel_array)
         self.rUA = wp.zeros(shape= model.cells.shape[0],dtype= model.float_dtype)
         self.rUA_faces = wp.zeros(shape= model.faces.shape[0],dtype= model.float_dtype)
         self.HbyA_faces = wp.zeros(shape=model.faces.shape[0],dtype = vector(3,dtype=model.float_dtype))
@@ -43,7 +43,7 @@ class SIMPLE():
         p_correction_diffusion = self.p_correction_diffusion
         vel_equation= self.vel_equation
         p_corr_equation = self.p_corr_equation
-        vel_array = self.vel_array
+        
         HbyA = self.HbyA
         rUA = self.rUA 
         rUA_faces = self.rUA_faces
@@ -65,14 +65,13 @@ class SIMPLE():
             # print('v\n',vel_equation.dense[0::3,0::3])
             # print('v\n',vel_equation.rhs.numpy()[::3])
             Ap = vel_equation.diagonal
-            outer_loop_result,vel_array = vel_equation.solve_Axb(vel_array)
-            # print(vel_array[::3])
+            outer_loop_result,HbyA = vel_equation.solve_Axb(HbyA)
      
-            rUA = calculate_rUA(Ap,model.cells,rUA)
-            rUA_faces = interpolate_cell_value_to_face(rUA_faces,rUA,model.faces)
-
             p_grad = model.get_gradient('p').flatten() 
-            HbyA = get_HbyA(HbyA,rUA,vel_array,p_grad)
+            rUA = calculate_rUA(Ap,model.cells,rUA)
+            HbyA = get_HbyA(HbyA,rUA,p_grad)
+
+            rUA_faces = interpolate_cell_value_to_face(rUA_faces,rUA,model.faces)
             model.replace_cell_values(['u','v','w'],HbyA)
             
             for _ in range(self.NUM_INNER_LOOPS):
@@ -108,7 +107,7 @@ class SIMPLE():
             if i % steps_per_check == 0:
                 print(f'step iter: {i}')
                 print(f'Outer loop Linear Solve {outer_loop_result} Inner loop solve {inner_loop_result}:')
-                converged = model.check_convergence(vel_equation.matrix,vel_array,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
+                converged = model.check_convergence(vel_equation.matrix,HbyA,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
                 
                 if converged:
                     print(f'Run Reached Convergence Criteria at iteration {i}')

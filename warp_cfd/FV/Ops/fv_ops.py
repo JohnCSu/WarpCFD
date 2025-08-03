@@ -35,11 +35,11 @@ def _interpolate_cell_value_to_face_kernel(D_face:wp.array(dtype=Any),
         D_face[face_id] = D_f
 
 @wp.kernel
-def get_HbyA_kernel(HbyA:wp.array(dtype=Any),rUA:wp.array(dtype=Any),u:wp.array(dtype=Any),grad_P:wp.array(dtype=Any)):
+def get_HbyA_kernel(HbyA:wp.array(dtype=Any),rUA:wp.array(dtype=Any),grad_P:wp.array(dtype=Any)):
     i,j = wp.tid() # C,3
     index = i*3 + j
 
-    HbyA[index] = u[index] + grad_P[index]*rUA[i]
+    HbyA[index] +=  grad_P[index]*rUA[i]
 
 
 
@@ -113,6 +113,6 @@ def interpolate_cell_value_to_face(face_value:wp.array,cell_value:wp.array,faces
     wp.launch(_interpolate_cell_value_to_face_kernel,dim = faces.shape[0],inputs= [face_value,cell_value,faces])
     return face_value
 
-def get_HbyA(HbyA:wp.array(dtype=float),rUA:wp.array(dtype=float),u:wp.array(dtype=float),grad_P:wp.array(dtype=float)):
-    wp.launch(get_HbyA_kernel,dim = (rUA.shape[0],3),inputs = [HbyA,rUA,u,grad_P] )
+def get_HbyA(HbyA:wp.array(dtype=float),rUA:wp.array(dtype=float),grad_P:wp.array(dtype=float)):
+    wp.launch(get_HbyA_kernel,dim = (rUA.shape[0],3),inputs = [HbyA,rUA,grad_P] )
     return HbyA
