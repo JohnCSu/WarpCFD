@@ -46,13 +46,9 @@ if __name__ == '__main__':
     model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
     model.init_step()
     centroids = model.struct_member_to_array('centroid','cells')
-    
-    IC = np.ones(shape = (model.num_cells,model.num_outputs),dtype= np.float32)
-    IC[-1,:] = 0.
-    # model.set_initial_conditions(wp.array(IC))
 
     solver = SIMPLE(model,0.7,0.3,correction=False)
-    solver.run(2000,100)
+    solver.run(1000,100)
 
     # exit()
     from matplotlib import pyplot as plt
