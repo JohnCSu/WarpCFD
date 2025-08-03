@@ -6,3 +6,4 @@ OtherCFD/*
 *.msh
 *.vtk
 *.geo
+test.py
