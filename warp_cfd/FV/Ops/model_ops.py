@@ -42,7 +42,6 @@ for key,(cell_struct,face_struct,node_struct) in CELL_DICT.items():
 
 
 
-wp.vec3d
 @wp.kernel
 def calculate_mass_flux_kernel(mass_fluxes:wp.array(dtype=Any),
                                face_values:wp.array2d(dtype=Any),
@@ -99,3 +98,17 @@ for key,(cell_struct,face_struct,node_struct) in CELL_DICT.items():
                                         "node_structs":wp.array(dtype= node_struct),
                                         "output_indices":wp.array(dtype=wp.int32),})
 
+
+
+@wp.kernel
+def fill_outputs_from_matrix_vector(arr:wp.array(dtype=Any),cell_values:wp.array2d(dtype=Any),output_indices:wp.array(dtype = int)):
+    i,output_idx = wp.tid()
+    num_outputs = output_indices.shape[0]
+    output = output_indices[output_idx]
+    row = num_outputs*i + output_idx
+    cell_values[i,output] = arr[row]
+
+for T in [wp.float32,wp.float64]:
+    wp.overload(fill_outputs_from_matrix_vector,{"arr":wp.array(dtype=T),
+                                                "cell_values":wp.array2d(dtype=T),
+                                            })
