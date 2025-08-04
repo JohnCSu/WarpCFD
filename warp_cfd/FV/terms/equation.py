@@ -6,8 +6,8 @@ from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.field import Field
 from warp.optim import linear
 from warp_cfd.FV.utils import bsr_to_coo_array
-
-class Matrix():
+import warp_cfd.FV.Ops.matrix_ops as matrix_ops
+class Equation():
     def __init__(self,fvm:FVM,fields:str| list[str],solver = linear.bicgstab) -> None:
         if isinstance(fields,str):
             fields = [fields]
@@ -39,11 +39,17 @@ class Matrix():
             self.tol = 1.e-9
 
         self.initial = True
-        
-        
+                
         self.rhs = wp.zeros(shape=(self.sparse_rows),dtype=fvm.float_dtype)
 
-        fvm.matrix_ops.calculate_BSR_matrix_indices(self.COO_array,fvm.cells,fvm.faces,num_outputs = self.num_outputs)
+        wp.launch(kernel=matrix_ops.calculate_BSR_matrix_indices,dim = [fvm.num_cells,fvm.faces_per_cell+1,self.num_outputs],inputs = [self.COO_array.rows,
+                                                                                                                  self.COO_array.cols,
+                                                                                                                  self.COO_array.offsets,
+                                                                                                                  fvm.cells,
+                                                                                                                  fvm.faces,
+                                                                                                                  self.num_outputs
+                                                                                                                  ])
+
         self.A = sparse.bsr_from_triplets(self.sparse_rows,self.sparse_rows,
                                                       rows = self.COO_array.rows,
                                                       columns = self.COO_array.cols,
@@ -105,8 +111,8 @@ class Matrix():
                 assert term.implicit
                 assert term.weights.shape[-2] ==  self.num_outputs
                 # fvm.matrix_ops.calculate_BSR_matrix(self.A,fvm.cells,weights,output_indices,rows= self.vel_matrix_rows,flip_sign = True)
-                self.matrix_ops.calculate_Implicit_LHS(self.A,fvm.cells,term.weights,term.scale,self.rows)
-                self.matrix_ops.calculate_Implicit_RHS(self.rhs,fvm.faces,term.weights,term.scale)
+                self.calculate_Implicit_LHS(self.A,fvm.cells,term.weights,term.scale,self.rows)
+                self.calculate_Implicit_RHS(self.rhs,fvm.faces,term.weights,term.scale,fvm.boundary_ids)
         
         if explicit_terms is not None:
             if isinstance(explicit_terms,Term):
@@ -114,41 +120,71 @@ class Matrix():
 
             for rhs_term in explicit_terms:
                 assert not rhs_term.implicit
-                self.matrix_ops.add_to_RHS(self.rhs,rhs_term.weights,rhs_term.scale)
+                self.rhs += rhs_term.scale*rhs_term.weights
+                # self.matrix_ops.add_to_RHS(self.rhs,rhs_term.weights,rhs_term.scale)
+
+    @staticmethod
+    def calculate_Implicit_LHS(BSR_matrix:sparse.BsrMatrix,cells,weights,scale,rows =None):
+        if rows is None:
+            rows = BSR_matrix.uncompress_rows()
+        assert rows.shape[0] == BSR_matrix.values.shape[0]
+
+        output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int)
+        wp.launch(kernel=matrix_ops.calculate_BSR_values_kernel,dim = BSR_matrix.values.shape[0],inputs=[rows,
+                                                                                                BSR_matrix.columns,
+                                                                                                BSR_matrix.values,
+                                                                                                cells,
+                                                                                                weights,
+                                                                                                output_indices,
+                                                                                                scale])
+
+
+    @staticmethod
+    def calculate_Implicit_RHS(b,faces,weights,scale:float,boundary_ids):
+        output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int) # Num of outputs as it is C,F,O,3
+        wp.launch(kernel= matrix_ops._calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
+                                                                                                                        boundary_ids,
+                                                                                                                        faces,
+                                                                                                                        weights,
+                                                                                                                        output_indices,
+                                                                                                                        scale,
+                ])
+
+
 
     def add_RHS(self,arr:wp.array,scale = 1.):
-        self.matrix_ops.add_to_RHS(self.rhs,arr,scale)
+        self.rhs += scale*arr
+        
 
     def relax(self,relaxation_factor,fvm:FVM = None):
         fvm = self.fvm if fvm is None else fvm
         assert self.global_output_indices is not None, 'Relaxation is only available for fields defined in fvm'
-        self.matrix_ops.implicit_relaxation(self.A,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices,self.rows)
+
+
+        if self.rows is None:
+            self.rows = self.A.uncompress_rows()
+        cols,values = self.A.columns,self.A.values
+        wp.launch(kernel=matrix_ops.implicit_relaxation_kernel,dim = self.rows.shape[0],inputs = [self.rows,cols,values,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices])
+        # matrix_ops.implicit_relaxation(self.A,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices,self.rows)
 
     
     def replace_row(self,row_id:int | wp.array,rhs_value: float | wp.array):
         if isinstance(row_id,int):
             row_id= wp.array([row_id],dtype=wp.int32)
         if isinstance(rhs_value,float):
-            v = wp.empty(shape=row_id.shape,dtype=self.float_dtype)
-            v.fill_(rhs_value)
+            value = wp.empty(shape=row_id.shape,dtype=self.float_dtype)
+            value.fill_(rhs_value)
 
-        assert row_id.shape == v.shape
+        assert row_id.shape == value.shape
 
-        self.matrix_ops.replace_row(self.A,self.rhs,row_id,v)
+        wp.launch(matrix_ops.replace_row_kernel,dim = row_id.shape, inputs=[self.A.offsets,self.A.columns,self.A.values,self.rhs,row_id,value])
     def solve_Axb(self,x = None):
         if x is None:
             x = self.x
-        
-        result = self.matrix_ops.solve_Axb(self.A,x,self.rhs,self.linear_solver,self.tol,self.max_iter)
+        M = linear.preconditioner(self.A)
+        result =self.linear_solver(A =self.A,M= M,atol = self.tol, b = self.rhs,x = x,maxiter=self.max_iter) 
         return result,x
     
     def reset(self):
         self.rhs.zero_()
         self.A.values.zero_()
-
-    def calculate_gradient(self,coeff:float|wp.array = 1.,fvm = None):
-        ''' Currently Assumes vonneumann BC !!!! Calculate the gradient of the output using green gauss '''
-        fvm = self.fvm if fvm is None else fvm
-        assert len(self.fields) == 1, 'Gradient Output Only for matrix related to one field'
-        output_gradient = green_gauss_gradient(self.x,self.output_gradient,coeff,fvm)
-        return output_gradient
