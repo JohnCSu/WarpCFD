@@ -2,7 +2,7 @@
 from warp_cfd.FV.model import FVM
 import numpy as np
 import warp as wp
-from warp_cfd.FV.implicit_Solvers import SIMPLE
+from warp_cfd.FV.implicit_Solvers import IncompressibleSolver
 from warp_cfd.preprocess import Mesh
 
 from warp_cfd.preprocess import create_2D_grid,Mesh,define_boundary_walls
@@ -46,13 +46,13 @@ if __name__ == '__main__':
     model.set_reference_pressure(0,0.)
     centroids = model.struct_member_to_array('centroid','cells')
 
-    solver = SIMPLE(model,0.7,0.3,correction=False)
+    solver = IncompressibleSolver(model,0.7,0.3,correction=False)
     solver.run(1000,100)
 
     # exit()
     from matplotlib import pyplot as plt
 
-    velocity = solver.vel_array.numpy().reshape(-1,3)
+    velocity = model.cell_values.numpy().reshape(-1,3)
     p = model.cell_values.numpy()[:,3]
     u = velocity[:,0]
     v = velocity[:,1]

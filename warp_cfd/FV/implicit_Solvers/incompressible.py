@@ -7,7 +7,7 @@ import warp as wp
 from warp_cfd.FV.kernels.solver_kernels import interpolate_cell_value_to_face,calculate_rUA,get_HbyA
 from warp.types import vector
 from warp.optim import linear
-class SIMPLE():
+class IncompressibleSolver():
     def __init__(self,model:FVM,u_relaxation_factor=0.7,p_relaxation_factor = 0.3,correction = False) -> None:
         self.model = model
 

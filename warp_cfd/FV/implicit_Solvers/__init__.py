@@ -1,1 +1,1 @@
-from .SIMPLE import SIMPLE
+from .incompressible import IncompressibleSolver
