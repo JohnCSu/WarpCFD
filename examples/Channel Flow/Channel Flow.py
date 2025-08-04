@@ -58,7 +58,7 @@ if __name__ == '__main__':
     # exit()
     from matplotlib import pyplot as plt
 
-    velocity = solver.vel_array.numpy().reshape(-1,3)
+    velocity = model.cell_values.numpy()[:,0:3] 
     p = model.cell_values.numpy()[:,3]
     u = velocity[:,0]
     v = velocity[:,1]
