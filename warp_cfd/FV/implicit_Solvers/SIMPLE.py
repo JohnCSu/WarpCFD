@@ -1,7 +1,7 @@
 import warp as wp
 from warp_cfd.FV import FVM
 import numpy as np
-from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Matrix
+from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Equation
 from warp_cfd.FV.field import Field
 import warp as wp
 from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA,get_HbyA
@@ -17,10 +17,10 @@ class SIMPLE():
         self.diffusion = DiffusionTerm(model,velocity_vars,correction = correction)
         self.grad_P = GradTerm(model,'p') # P
 
-        self.vel_equation = Matrix(model,fields = velocity_vars)
+        self.vel_equation = Equation(model,fields = velocity_vars)
 
         self.p_correction_diffusion = DiffusionTerm(model,'p',correction=correction)
-        self.p_corr_equation = Matrix(model,fields = 'p',solver = linear.cg)
+        self.p_corr_equation = Equation(model,fields = 'p',solver = linear.cg)
 
         self.vel_correction = wp.zeros(shape=(model.num_cells,3),dtype=float)
 
@@ -77,7 +77,7 @@ class SIMPLE():
             for _ in range(self.NUM_INNER_LOOPS):
                 
                 model.face_interpolation()
-                model.calculate_gradients() # We need P grad
+                model.calculate_gradients()
                 model.calculate_mass_flux()
 
                 # Pressure Correction
@@ -115,4 +115,4 @@ class SIMPLE():
                 
         print(f'MAX ITERATIONS OF {num_steps} REACHED. Terminating')
         print(f'Outer loop Linear Solve {outer_loop_result} Inner loop solve {inner_loop_result}:')
-        converged = model.check_convergence(vel_equation.matrix,vel_array,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
+        converged = model.check_convergence(vel_equation.matrix,HbyA,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
