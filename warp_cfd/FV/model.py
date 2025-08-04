@@ -7,7 +7,6 @@ from warp_cfd.FV.utils import to_vector_array
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.mesh_structs as Cells
-from warp_cfd.FV.Ops import Matrix_Ops
 from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.field import Field
@@ -100,11 +99,6 @@ class FVM():
         self.nodes = wp.zeros(shape= self.num_nodes,dtype=self.node_struct)
         '''Array of node structs for storing inforation about nodes (mainly id and coordinates)'''
 
-        self.face_viscosity = None
-        
-        Ops_args = [self.cell_struct,self.face_struct,self.node_struct,self.cell_properties,self.face_properties,self.num_outputs,self.float_dtype,self.int_dtype]
-
-        self.matrix_ops = Matrix_Ops(*Ops_args)
         
         self.reference_pressure_cell_id = None
         self.reference_pressure = 0.
@@ -116,8 +110,7 @@ class FVM():
         Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
         self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
         self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
-        self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype) 
-        self.matrix_ops.init()        
+        self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)         
         self.init_global_arrays()
     
     def set_initial_conditions(self,IC:wp.array,output_indices = None):
@@ -288,14 +281,15 @@ class FVM():
         return self.Convergence.has_converged()
     
 
-    def replace_cell_values(self,output_indices:int | list | tuple |wp.array,value:float | wp.array):
+    def replace_cell_values(self,output_indices:int | list | tuple |wp.array,value: wp.array):
         '''
         Completely Override the values stored in the cell values array. To add to the cell values, see `update_cell_values()` method instead
         '''
         output_indices = self.get_output_indices(output_indices)
         # if isinstance(field_idx,(list,tuple,wp.array)):
         assert output_indices.shape[0]*self.num_cells == value.shape[0]
-        self.matrix_ops.fill_outputs_from_matrix_vector(self.cell_values,value,output_indices)
+        wp.launch(model_ops.fill_outputs_from_matrix_vector,dim = (self.num_cells,output_indices.shape[0]), inputs =  [value,self.cell_values,output_indices])
+        
 
 
     def update_cell_values(self,field_idx:int | list | tuple |wp.array,value:float | wp.array,scale : float = 1.):
