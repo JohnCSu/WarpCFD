@@ -3,9 +3,7 @@ from typing import Any
 from warp_cfd.FV.utils import COO_Arrays
 from warp.optim import linear
 import warp.sparse as sparse
-from .._deprecated.ops_class import Ops
 from warp_cfd.FV.mesh_structs import CELL_DICT
-
 
 
 

@@ -6,7 +6,7 @@ from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.field import Field
 from warp.optim import linear
 from warp_cfd.FV.utils import bsr_to_coo_array
-import warp_cfd.FV.Ops.equation_ops as equation_ops
+from warp_cfd.FV.kernels import equation_kernels
 class Equation():
     def __init__(self,fvm:FVM,fields:str| list[str],solver = linear.bicgstab) -> None:
         if isinstance(fields,str):
@@ -42,7 +42,7 @@ class Equation():
                 
         self.rhs = wp.zeros(shape=(self.sparse_rows),dtype=fvm.float_dtype)
 
-        wp.launch(kernel=equation_ops.calculate_BSR_matrix_indices,dim = [fvm.num_cells,fvm.faces_per_cell+1,self.num_outputs],inputs = [self.COO_array.rows,
+        wp.launch(kernel=equation_kernels.calculate_BSR_matrix_indices,dim = [fvm.num_cells,fvm.faces_per_cell+1,self.num_outputs],inputs = [self.COO_array.rows,
                                                                                                                   self.COO_array.cols,
                                                                                                                   self.COO_array.offsets,
                                                                                                                   fvm.cells,
@@ -129,7 +129,7 @@ class Equation():
         assert rows.shape[0] == BSR_matrix.values.shape[0]
 
         output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int)
-        wp.launch(kernel=equation_ops.calculate_BSR_values_kernel,dim = BSR_matrix.values.shape[0],inputs=[rows,
+        wp.launch(kernel=equation_kernels.calculate_BSR_values_kernel,dim = BSR_matrix.values.shape[0],inputs=[rows,
                                                                                                 BSR_matrix.columns,
                                                                                                 BSR_matrix.values,
                                                                                                 cells,
@@ -141,7 +141,7 @@ class Equation():
     @staticmethod
     def calculate_Implicit_RHS(b,faces,weights,scale:float,boundary_ids):
         output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int) # Num of outputs as it is C,F,O,3
-        wp.launch(kernel= equation_ops._calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
+        wp.launch(kernel= equation_kernels._calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
                                                                                                                         boundary_ids,
                                                                                                                         faces,
                                                                                                                         weights,
@@ -163,7 +163,7 @@ class Equation():
         if self.rows is None:
             self.rows = self.A.uncompress_rows()
         cols,values = self.A.columns,self.A.values
-        wp.launch(kernel=equation_ops.implicit_relaxation_kernel,dim = self.rows.shape[0],inputs = [self.rows,cols,values,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices])
+        wp.launch(kernel=equation_kernels.implicit_relaxation_kernel,dim = self.rows.shape[0],inputs = [self.rows,cols,values,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices])
         # matrix_ops.implicit_relaxation(self.A,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices,self.rows)
 
     
@@ -176,7 +176,7 @@ class Equation():
 
         assert row_id.shape == value.shape
 
-        wp.launch(equation_ops.replace_row_kernel,dim = row_id.shape, inputs=[self.A.offsets,self.A.columns,self.A.values,self.rhs,row_id,value])
+        wp.launch(equation_kernels.replace_row_kernel,dim = row_id.shape, inputs=[self.A.offsets,self.A.columns,self.A.values,self.rhs,row_id,value])
     def solve_Axb(self,x = None):
         if x is None:
             x = self.x

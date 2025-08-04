@@ -1,6 +1,6 @@
 import warp as wp
 import numpy as np
-from ..Ops.ops_class import Ops
+from .ops_class import Ops
 from typing import Any
 class Pressure_correction_Ops(Ops):
     def __init__(self,cell_struct,face_struct,node_struct,weight_struct,cell_properties,face_properties,num_outputs,float_dtype = wp.float32,int_dtype = wp.int32):

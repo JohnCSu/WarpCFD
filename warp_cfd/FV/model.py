@@ -10,7 +10,7 @@ import warp_cfd.FV.mesh_structs as Cells
 from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.field import Field
-from warp_cfd.FV.Ops import model_ops
+from warp_cfd.FV.kernels import model_kernels
 from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation,upwind
 from typing import Any
 
@@ -202,7 +202,7 @@ class FVM():
         output_indices = self.get_output_indices(output_indices)        
         self.cell_gradients.zero_()
 
-        wp.launch(kernel=model_ops.calculate_gradients_kernel,dim = (self.num_cells,self.faces_per_cell,len(output_indices)),inputs = [self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,output_indices])
+        wp.launch(kernel=model_kernels.calculate_gradients_kernel,dim = (self.num_cells,self.faces_per_cell,len(output_indices)),inputs = [self.face_values,self.cell_gradients,self.cells,self.faces,self.nodes,output_indices])
 
     
     def get_gradient(self,output_index: str | int,coeff = 1.):
@@ -215,7 +215,7 @@ class FVM():
         gradient_array = wp.array2d(shape = (self.num_cells,3),dtype = self.float_dtype)
         if isinstance(coeff,float):
             coeff = wp.array([coeff],dtype= self.float_dtype)
-        wp.launch(model_ops.get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,output_index] )
+        wp.launch(model_kernels.get_gradient_kernel,dim = (self.num_cells,3),inputs= [gradient_array,coeff,self.cell_gradients,output_index] )
         
         return gradient_array
     
@@ -229,7 +229,7 @@ class FVM():
 
     def calculate_mass_flux(self):
         # self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
-        wp.launch(kernel = model_ops.calculate_mass_flux_kernel,dim = (self.mass_fluxes.shape[0]),inputs = [self.mass_fluxes,self.face_values,self.cells,self.faces,])
+        wp.launch(kernel = model_kernels.calculate_mass_flux_kernel,dim = (self.mass_fluxes.shape[0]),inputs = [self.mass_fluxes,self.face_values,self.cells,self.faces,])
        
 
     def divFlux(self,arr = None):
@@ -237,7 +237,7 @@ class FVM():
             arr = wp.zeros(shape = self.cells.shape[0],dtype= self.float_dtype)
         arr.zero_()
         # self.mesh_ops.calculate_divergence(self.mass_fluxes,self.cells,arr)
-        wp.launch(kernel=model_ops.divFlux_kernel, dim = (self.num_cells,self.faces_per_cell),inputs = [self.mass_fluxes,self.cells,arr])
+        wp.launch(kernel=model_kernels.divFlux_kernel, dim = (self.num_cells,self.faces_per_cell),inputs = [self.mass_fluxes,self.cells,arr])
         return arr
     
 
@@ -288,7 +288,7 @@ class FVM():
         output_indices = self.get_output_indices(output_indices)
         # if isinstance(field_idx,(list,tuple,wp.array)):
         assert output_indices.shape[0]*self.num_cells == value.shape[0]
-        wp.launch(model_ops.fill_outputs_from_matrix_vector,dim = (self.num_cells,output_indices.shape[0]), inputs =  [value,self.cell_values,output_indices])
+        wp.launch(model_kernels.fill_outputs_from_matrix_vector,dim = (self.num_cells,output_indices.shape[0]), inputs =  [value,self.cell_values,output_indices])
         
 
 

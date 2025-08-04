@@ -4,7 +4,7 @@ import numpy as np
 from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Equation
 from warp_cfd.FV.field import Field
 import warp as wp
-from warp_cfd.FV.Ops.fv_ops import interpolate_cell_value_to_face,calculate_rUA,get_HbyA
+from warp_cfd.FV.kernels.solver_kernels import interpolate_cell_value_to_face,calculate_rUA,get_HbyA
 from warp.types import vector
 from warp.optim import linear
 class SIMPLE():

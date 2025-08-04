@@ -1,6 +1,6 @@
 import warp as wp
 import numpy as np
-from ..Ops.ops_class import Ops
+from .ops_class import Ops
 
 
 class Weights_Ops(Ops):

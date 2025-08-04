@@ -1,6 +1,6 @@
 import warp as wp
 from typing import Any
-from warp_cfd.FV.Ops.ops_class import Ops
+from warp_cfd.FV._deprecated.ops_class import Ops
 from warp_cfd.FV.mesh_structs import HEX,HEX_FACE,WEDGE,WEDGE_FACE,TETRA,TETRA_FACE
 class Mesh_Ops(Ops):
     '''
