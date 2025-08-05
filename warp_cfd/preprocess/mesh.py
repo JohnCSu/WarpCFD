@@ -615,17 +615,15 @@ class faces_data():
         
     def to_NVD_warp(self,float_type = wp.float32):
         '''Convert Arrays to Warp Arrays, if the last dimension matches that of the dimension in faces class, assume its a vector'''
-
-        faces = faces_data()
+        
+        faces = self
         faces.array_type = 'warp'
-        faces.boundary_type = wp.array(self.boundary_type)
-        faces.boundary_value = wp.array(self.boundary_value)
         faces.boundary_face_ids = wp.array(self.boundary_face_ids)
         
 
         for key,val in self.__dict__.items():
-            if hasattr(faces,key): # We already defined something so dont change existing attr
-                continue
+            # if hasattr(faces,key): # We already defined something so dont change existing attr
+            #     continue
 
             if isinstance(val,np.ndarray):
                 # The last array is the vector lengh

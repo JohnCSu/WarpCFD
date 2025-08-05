@@ -9,6 +9,7 @@ from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.mesh_structs as Cells
 from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
+from warp_cfd.FV.boundary import Boundary
 from warp_cfd.FV.field import Field
 from warp_cfd.FV.kernels import model_kernels
 from warp_cfd.FV.interpolation_Schemes import boundary_calculate_face_interpolation_kernel,internal_calculate_face_interpolation_kernel,linear_interpolation,upwind
@@ -53,20 +54,24 @@ class FVM():
     def __init__(self,mesh:Mesh,output_variables = None,density:float = 1000,viscosity:float = 1e-3,float_dtype = wp.float32,int_dtype = wp.int32):
         self.density = density
         self.viscosity = viscosity
-        self.gridType:str = mesh.gridType
+        # self.gridType:str = mesh.gridType
         self.dimension:int = mesh.dimension
+        
         self.float_dtype = float_dtype
         self.int_dtype = int_dtype
         self.vector3d_dtype = vector(3,dtype=self.float_dtype)
-        self.cellType = mesh.cellType
+
         self.mesh = mesh
-        assert mesh.num_outputs == len(output_variables), 'Number of defined output variables must match number of outputs given in mesh'
+        
         self.settings = CFD_settings()
         self.Convergence = Convergence()
         self.skew_correction = True
-        self.face_properties = mesh.face_properties.to_NVD_warp(self.float_dtype)
-        self.cell_properties = mesh.cell_properties.to_NVD_warp(self.float_dtype)
-        self.node_properties = to_vector_array(mesh.nodes,self.float_dtype) 
+        
+        
+        self.face_properties = self.mesh.face_properties
+        self.cell_properties = self.mesh.cell_properties
+        self.node_properties = self.mesh.nodes
+
         # Output for each cell: T,C,4 (u,v,w,p)
         self.input_variables = ['x','y','z','t']
         
@@ -77,6 +82,10 @@ class FVM():
 
         self.fields = {output:Field(output,i) for i,output in enumerate(self.output_variables)}
         
+
+        self.boundary = Boundary(self.fields,mesh.groups,boundary_ids= self.face_properties.boundary_face_ids,float_type= self.float_dtype)
+
+
         self.vars_mapping = {var:i for i,var in enumerate(self.output_variables)}
         self.output_indices = wp.array(np.arange(len(self.output_variables)),dtype=self.int_dtype)
         self.vel_indices = wp.array([0,1,2],dtype=self.int_dtype)
@@ -102,16 +111,30 @@ class FVM():
         
         self.reference_pressure_cell_id = None
         self.reference_pressure = 0.
+        self.initilized = False
+
+        # self.init_step()
 
 
-        self.init_step()
+    def initialize(self):
+        '''
+        Initialize required arrays and functions for solver. Done Lazily so freedom to make changes before this is called.
 
-    def init_step(self):
-        Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
-        self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
-        self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
-        self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)         
-        self.init_global_arrays()
+        Solvers will call this again to be sure, but users should call this to indicate that changes should be made above this method call.
+        '''
+        if not self.initilized:
+            self.face_properties = self.face_properties.to_NVD_warp(self.float_dtype)
+            self.cell_properties = self.cell_properties.to_NVD_warp(self.float_dtype)
+            self.node_properties = to_vector_array(self.mesh.nodes,self.float_dtype)
+            self.boundary.check_and_to_warp()
+
+            Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
+            self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
+            self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
+            self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)         
+            self.init_global_arrays()
+            self.initilized = True
+
     
     def set_initial_conditions(self,IC:wp.array,output_indices = None):
         cell_values = self.cell_values
@@ -126,10 +149,18 @@ class FVM():
         self.reference_pressure = float(value)
 
     def init_global_arrays(self):
+
+       
+        # self.boundary_value = self.face_properties.boundary_value
+        # self.boundary_type = self.face_properties.boundary_type
+        # self.boundary_ids = self.face_properties.boundary_face_ids
+
         
-        self.boundary_value = self.face_properties.boundary_value
-        self.boundary_type = self.face_properties.boundary_type
-        self.boundary_ids = self.face_properties.boundary_face_ids
+        self.boundary_value = self.boundary.boundary_values
+        self.boundary_type = self.boundary.boundary_type
+        self.boundary_ids = self.boundary.boundary_ids
+
+
 
         self.cell_values = wp.zeros((self.num_cells,self.num_outputs),dtype = self.float_dtype)
         self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.vector3d_dtype)

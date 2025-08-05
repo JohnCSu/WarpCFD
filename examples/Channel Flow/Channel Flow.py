@@ -21,7 +21,7 @@ if __name__ == '__main__':
     np.set_printoptions(linewidth=500,threshold=1e10,precision = 7)
     
     width,height = 5.,1.
-    ny = 31
+    ny = 10
     nx = ny*int(width)# Approximate number of cells in x and y direction
     
     Re = 100
@@ -31,25 +31,20 @@ if __name__ == '__main__':
     m = Mesh(pv_mesh,num_outputs=4)
     define_boundary_walls(m)
     # IC = np.load(f'benchmark_n{n}.npy')
-    m.set_boundary_value('+X',p= 0) # pressure outlet
-    m.set_boundary_value('-X',p = 1) # pressure inlet
-    m.set_boundary_value('-Y',u = 0,v = 0,w = 0) # No Slip
-    m.set_boundary_value('+Y',u = 0,v = 0,w = 0) # Velocity Inlet
-
-    '''
-    Add check that All bf have some fixed value => Boundary IDs should equal same length as boundary faces
-    '''
-    m.set_gradient_value('-Z',u=0,v=0,w=0,p=0) # No penetration condition
-    m.set_gradient_value('+Z',u=0,v=0,w=0,p=0) # No penetration condition
-    m.set_gradient_value('-X',u = 0,v = 0,w = 0) # von Neuman at inlet
-    m.set_gradient_value('+X',u = 0,v = 0,w = 0)
-    m.set_gradient_value('+Y',p = 0) # Velocity Inlet
-    m.set_gradient_value('-Y',p = 0) # Velocity Inlet
+    
     
     # m.set_cell_value(0,p= 0)
     
     model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
-    model.init_step()
+
+
+    model.boundary.pressure_BC('+X', p = 0)
+    model.boundary.no_slip_wall('-Y')
+    model.boundary.no_slip_wall('+Y')
+    model.boundary.pressure_BC('-X',p = 1)
+    model.boundary.slip_wall('-Z')
+    model.boundary.slip_wall('+Z')
+    model.initialize()
     centroids = model.struct_member_to_array('centroid','cells')
 
     solver = IncompressibleSolver(model,0.1,0.1,correction=False)
