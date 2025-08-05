@@ -28,7 +28,7 @@ if __name__ == '__main__':
     G,nu = 1,1/Re
     dz =0.1
     pv_mesh = create_2D_grid((0,0,0), nx, ny , width,height,dz = dz,element_type= 'hex',display_mesh= False,save = 'wedge')
-    m = Mesh(pv_mesh,num_outputs=4)
+    m = Mesh(pv_mesh)
     define_boundary_walls(m)
     # IC = np.load(f'benchmark_n{n}.npy')
     
@@ -37,17 +37,19 @@ if __name__ == '__main__':
     
     model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
 
-
     model.boundary.pressure_BC('+X', p = 0)
+    model.boundary.pressure_BC('-X',p = 1)
+
     model.boundary.no_slip_wall('-Y')
     model.boundary.no_slip_wall('+Y')
-    model.boundary.pressure_BC('-X',p = 1)
+    
     model.boundary.slip_wall('-Z')
     model.boundary.slip_wall('+Z')
     model.initialize()
-    centroids = model.struct_member_to_array('centroid','cells')
-
     solver = IncompressibleSolver(model,0.1,0.1,correction=False)
+
+
+    centroids = model.struct_member_to_array('centroid','cells')
     solver.run(1000,100)
 
     # exit()

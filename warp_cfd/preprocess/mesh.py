@@ -15,7 +15,7 @@ class group():
         self.type = type
 
 class Mesh():
-    def __init__(self,pyvista_mesh: pv.UnstructuredGrid |pv.StructuredGrid,dtype = np.float32,num_outputs = 4) -> None:
+    def __init__(self,pyvista_mesh: pv.UnstructuredGrid |pv.StructuredGrid,dtype = np.float32) -> None:
         assert isinstance(pyvista_mesh,(pv.UnstructuredGrid,pv.StructuredGrid))
         assert len(list(pyvista_mesh.cells_dict.keys())) == 1, 'Meshes can only contain a single cell type for now, Got multiple'
         
@@ -33,7 +33,7 @@ class Mesh():
         self.cell_volumes = np.array(pyvista_mesh.compute_cell_sizes()['Volume'],dtype=self.float_dtype).__abs__()
         self.groups:dict[str,group] = {}
         
-        self.num_outputs = num_outputs
+        # self.num_outputs = num_outputs
         
         self.support_cell_types = [CellType.HEXAHEDRON,CellType.TETRA,CellType.WEDGE]
         self.gridType = 'Unstructured' if isinstance(pyvista_mesh,pv.UnstructuredGrid) else 'Structured'
@@ -228,7 +228,6 @@ class Mesh():
 
         K = unique_faces.shape[0]
         D = self.dimension
-        O = self.num_outputs
         faces = faces_data()
         cells = cells_data()
         #We can populate all FaceID, Face Normal And Face Area first
@@ -260,8 +259,6 @@ class Mesh():
         cells.neighbors = np.ones((C,F),dtype = self.int_dtype)*(-1) # --1 for no neighbot (external face), otherwise give cell neighbor ID and faceID
         cells.face_side = np.zeros((C,F),dtype = self.int_dtype)
         cells.nnz_per_cell = np.ones(C,dtype = self.int_dtype) # add 1 each time a cell appears in the for loop below
-        cells.value_is_fixed = np.zeros((C,O),dtype= np.uint8) 
-        cells.fixed_value = np.zeros((C,O),dtype= self.float_dtype) 
         
         for i,j in cell_neighbors: # Get Cell i and j ID
             faces_i,faces_j = cell_face_ids[i],cell_face_ids[j]
@@ -299,64 +296,10 @@ class Mesh():
         faces.internal_face_ids = face_ids[faces.is_boundary == 0]
         faces.num_boundary_faces = len(faces.boundary_face_ids)
 
-        # faces.boundary_value_is_fixed = np.zeros((faces.num_boundary_faces,O),dtype=np.uint8) 
-         # (K, dim+1) dim+1 number of output variables (u,v,w,p)
-        # faces.gradient_value_is_fixed = np.zeros((faces.num_boundary_faces,O),dtype=np.uint8)
-        faces.boundary_type = np.zeros((faces.num_boundary_faces,O),dtype=np.uint8)
-        faces.boundary_value = np.zeros((faces.num_boundary_faces,O),dtype= self.float_dtype) # We store all in boundary value and use boundary type to keep track
-        
-        # faces.robin_coefficients = np.zeros(())
-        # faces.gradient_value = np.zeros((faces.num_boundary_faces,O),dtype= self.float_dtype) # (K, dim+1) dim+1 number of output variables (u,v,w,p)
-
-        # Get Offset index Tahnks Chat GPT!
         cells.face_offset_index = (cells.neighbors != -1)
         cells.face_offset_index = np.array(np.cumsum(cells.face_offset_index,axis=1)*cells.face_offset_index,dtype= self.int_dtype)
         
         return faces,cells
-
-
-    def set_boundary_value(self,face_ids:str | int|list|tuple|np.ndarray,u = None,v=None,w=None,p=None):
-
-        if isinstance(face_ids,str):
-            assert face_ids in list(self.groups.keys()), 'Specified group name does not exist'
-            group_face_ids = self.groups[face_ids].ids
-            self.face_properties.set_boundary_value(group_face_ids,u,v,w,p,boundary_type= 'dirichlet')
-
-        elif isinstance(face_ids,(int,list,tuple,np.ndarray)):
-            self.face_properties.set_boundary_value(face_ids,u,v,w,p,boundary_type= 'dirichlet')
-
-        else:
-            raise ValueError(f'face_ids can be type string,int,list,tuple, or np.ndarray got {type(face_ids)} instead')
-
-    
-
-    def set_gradient_value(self,face_ids:str | int|list|tuple|np.ndarray,u = None,v=None,w=None,p=None):
-
-        if isinstance(face_ids,str):
-            assert face_ids in list(self.groups.keys()), 'Specified group name does not exist'
-            group_face_ids = self.groups[face_ids].ids
-            self.face_properties.set_gradient_value(group_face_ids,u,v,w,p)
-
-        elif isinstance(face_ids,(int,list,tuple,np.ndarray)):
-            self.face_properties.set_gradient_value(face_ids,u,v,w,p)
-
-        else:
-            raise ValueError(f'face_ids can be type string,int,list,tuple, or np.ndarray got {type(face_ids)} instead')
-
-    def set_cell_value(self,cell_ids:str | int|list|tuple|np.ndarray,u = None,v=None,w=None,p=None):
-
-        if isinstance(cell_ids,str):
-            assert cell_ids in list(self.groups.keys()), 'Specified group name does not exist'
-            group_cell_ids = self.groups[cell_ids].ids
-            self.cell_properties.set_cell_value(group_cell_ids,u,v,w,p)
-
-        elif isinstance(cell_ids,(int,list,tuple,np.ndarray)):
-            self.cell_properties.set_cell_value(cell_ids,u,v,w,p)
-
-        else:
-            raise ValueError(f'cell_ids can be type string,int,list,tuple, or np.ndarray got {type(cell_ids)} instead')
-
-
 
 
 
@@ -421,33 +364,13 @@ class cells_data():
         }
 
 
-    def set_cell_value(self,cell_ids: int | list |tuple |np.ndarray,u = None,v=None,w=None,p=None):
-
-        assert u is None and v is None and w is None, 'Only pressure can be perscribed to cell value at the moment'
-
-        assert isinstance(cell_ids,(int,list,tuple,np.ndarray))
-        
-        if not isinstance(cell_ids,(list,tuple,np.ndarray)):
-            cell_ids = np.array([cell_ids])
-
-        vars_mapping =self.vars_mapping
-        ''' Mapping of variable names to order'''
-        values_to_set = {name:val for name,val in zip(vars_mapping.keys(),[u,v,w,p]) if val is not None}
-        vars_to_fix = [idx for key,idx in vars_mapping.items() if key in values_to_set.keys() ]
-        idx = np.ix_(cell_ids,vars_to_fix)
-        self.fixed_value[idx] = list(values_to_set.values())
-        self.value_is_fixed[idx] = True
-
 
 
     def to_NVD_warp(self,float_type = wp.float32):
         '''Convert Arrays to Warp Arrays, if the last dimension matches that of the dimension in faces class, assume its a vector'''
 
-        
-        cells = cells_data()
+        cells = self
         cells.array_type = 'warp'
-
-        self.fixed_cells = np.nonzero(self.value_is_fixed[:,3])[0].astype(self.int_dtype) # We only take pressure for now
 
         for key,val in self.__dict__.items():
             if isinstance(val,np.ndarray):
@@ -512,21 +435,6 @@ class faces_data():
     '''(K,D) array containing the centroid point of each face'''
     is_boundary: np.ndarray| wp.array
     '''(K,) array that stores a boolean on whether a unique face is a boundary/external face (i.e. no neighbors) or internal face and if that variable at that face is a BC'''
-    boundary_value: np.ndarray| wp.array
-    ''' (K,O) specifying the values (u,v,w,p in 3D) given at each face. Default all 0'''
-    boundary_type:np.ndarray[np.uint8] | wp.array[np.uint8]
-    '''
-    Array of Size (Number of Boundary Faces). 
-    Here the type of BC to index number: 
-    - 1 : Dirichlet BC
-    - 2 : Von-Neumann BC
-    '''
-    # gradient_value: np.ndarray| wp.array
-    # ''' (K,O) specifying the  gradient of the variable (u,v,w,p) wrt the normal direction given at each face. Default all 0'''
-    # boundary_value_is_fixed : np.ndarray| wp.array
-    # ''' (K,O) array specifying if the variable (u,v,w,p) is free or fixed. set to True if value id determined and fixed'''
-    # gradient_value_is_fixed : np.ndarray| wp.array
-    # ''' (K,O) array specifying if the gradient of the variable (u,v,w,p) wrt the normal direction is free or fixed. set to True if value id determined and fixed'''
     boundary_face_ids : np.ndarray| wp.array
     '''(B) array of faces ids that are boundary faces''' 
     internal_face_ids : np.ndarray| wp.array 
@@ -539,7 +447,6 @@ class faces_data():
     '''
     (K) array of ints that says how many nodes comprise said face. Useful for Wedge elements
     '''
-
     distance: np.ndarray| wp.array
     '''(K,3) array that stores the centroid distance vector between 2 neighboring cells. If a face is not connected to a neighboring cell, distance is set to -1'''
     
@@ -560,62 +467,10 @@ class faces_data():
     num_boundary_faces:int
     ''' Number of faces that are boundaries'''
     
-    vars_mapping: dict = {
-            'u': 0, 
-            'v': 1,
-            'w': 2,
-            'p': 3,
-        }
-    
-    def set_boundary_value(self,face_ids: int | list |tuple |np.ndarray,u = None,v=None,w=None,p=None,boundary_type = 'dirchlet'):
-
-        boundary_types = {
-            'dirichlet': 1,
-            'vonNeumann': 2,
-        }
-        assert isinstance(face_ids,(int,list,tuple,np.ndarray))
-        
-        if not isinstance(face_ids,(list,tuple,np.ndarray)):
-            face_ids = np.array([face_ids],self.int_dtype)
-        
-        assert np.all(self.is_boundary[face_ids]), 'One of the provided face id is not an external face valid for applying boundary conditions'
-        ''' we either have a float for all in face_ids or an array of same len'''
-
-        
-        face_ids = np.where(np.isin(self.boundary_face_ids, face_ids))[0]
-
-        for i,var in enumerate([u,v,w,p]):
-            if var is not None:
-                self.boundary_value[face_ids,i] = var
-                self.boundary_type[face_ids,i] = boundary_types[boundary_type] 
-                       
-
-    def set_gradient_value(self,face_ids: int | list |tuple |np.ndarray,u = None,v=None,w=None,p=None):
-        '''
-        Set the gradient At a Boundary Face. if the input is a vector (i.e an array/list of 3 floats) then the gradient is projected onto the face with the face's normal
-        
-        If a float is specified, it is assumed to is the normal gradient
-        '''
-
-        output_vars = {
-            'u':u,
-            'v':v,
-            'w':w,
-            'p':p,
-        }
-
-        for output_var in [u,v,w,p]:
-            if isinstance(output_var,(np.ndarray,list,tuple)):
-                pass
-
-        self.set_boundary_value(face_ids,**output_vars,boundary_type='vonNeumann')
-
-
-
         
     def to_NVD_warp(self,float_type = wp.float32):
         '''Convert Arrays to Warp Arrays, if the last dimension matches that of the dimension in faces class, assume its a vector'''
-        
+
         faces = self
         faces.array_type = 'warp'
         faces.boundary_face_ids = wp.array(self.boundary_face_ids)
