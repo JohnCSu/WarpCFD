@@ -74,26 +74,38 @@ class Boundary():
     def fixed_BC(self,face_ids:str | int | list |tuple |np.ndarray,**output_vars):
         self.set_value(face_ids,**output_vars,boundary_type='dirichlet')
 
-    def velocity_BC(self,face_ids,u,v,w):
+    def velocity_BC(self,face_ids:str | int | list |tuple |np.ndarray,u,v,w):
+        '''
+        Set pressure at face whiles also setting normal gradient of u,v,w to 0
+        '''
         self.fixed_BC(face_ids,u=u,v=v,w=w)
         self.gradient_BC(face_ids,p = 0.)
 
-    def pressure_BC(self,face_ids,p,backflow=None):
+    def pressure_BC(self,face_ids:str | int | list |tuple |np.ndarray,p,backflow=None):
+        '''
+        Set pressure at face whiles also setting normal gradient of u,v,w to 0
+        '''
         self.fixed_BC(face_ids,p = p)
         self.gradient_BC(face_ids,u=0.,v=0.,w=0.)
 
-    def mass_flow_BC(self,face_ids,mass_flow,inlet = True):
+    def mass_flow_BC(self,face_ids:str | int | list |tuple |np.ndarray,mass_flow,inlet = True):
         raise ValueError('not yet implemented')
     
-    def no_slip_wall(self,face_ids):
+    def no_slip_wall(self,face_ids:str | int | list |tuple |np.ndarray):
+        '''
+        Set Fields u,v,w = 0 and wall normal gradient of p = 0
+        '''
         self.fixed_BC(face_ids,u=0.,v=0.,w=0.)
         self.gradient_BC(face_ids,p = 0.)
 
-    def slip_wall(self,face_ids):
+    def slip_wall(self,face_ids:str | int | list |tuple |np.ndarray):
+        '''
+        Set all Field normal gradients of u,v,w,p to 0.
+        '''
         self.gradient_BC(face_ids,u=0.,v=0.,w=0.,p = 0.)
         
 
-    def check_and_to_warp(self):
+    def finalize(self):
         '''
         Final Checks before converting to warp arrays
         '''

@@ -111,29 +111,31 @@ class FVM():
         
         self.reference_pressure_cell_id = None
         self.reference_pressure = 0.
-        self.initilized = False
+        self.finalized = False
 
         # self.init_step()
 
 
-    def initialize(self):
+    def finalize(self):
         '''
-        Initialize required arrays and functions for solver. Done Lazily so freedom to make changes before this is called.
+        finalize required arrays and functions for solver. Done Lazily so freedom to make changes before this is called.
 
         Solvers will call this again to be sure, but users should call this to indicate that changes should be made above this method call.
         '''
-        if not self.initilized:
+        if not self.finalized:
             self.face_properties = self.face_properties.to_NVD_warp(self.float_dtype)
             self.cell_properties = self.cell_properties.to_NVD_warp(self.float_dtype)
             self.node_properties = to_vector_array(self.mesh.nodes,self.float_dtype)
-            self.boundary.check_and_to_warp()
+            self.boundary.finalize()
 
             Cells.init_structs(self.cells,self.faces,self.nodes,self.cell_properties,self.face_properties,self.node_properties,float_dtype= self.float_dtype)
             self.boundary_face_interpolation = boundary_calculate_face_interpolation_kernel(self.cell_struct,self.face_struct,self.float_dtype)
             self.internal_face_interpolation = internal_calculate_face_interpolation_kernel(linear_interpolation,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)
             self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)         
             self.init_global_arrays()
-            self.initilized = True
+            self.finalized = True
+        print('Model Finalized')
+        
 
     
     def set_initial_conditions(self,IC:wp.array,output_indices = None):
@@ -160,8 +162,6 @@ class FVM():
         self.boundary_type = self.boundary.boundary_type
         self.boundary_ids = self.boundary.boundary_ids
 
-
-
         self.cell_values = wp.zeros((self.num_cells,self.num_outputs),dtype = self.float_dtype)
         self.cell_gradients = wp.zeros(shape = (self.num_cells,self.num_outputs),dtype = self.vector3d_dtype)
         self.face_values = wp.zeros(shape = (self.num_faces,self.num_outputs),dtype= self.float_dtype)
@@ -170,7 +170,8 @@ class FVM():
     
         self.update_cell_values_kernel = update_cell_values(self.float_dtype)
         self.update_cell_values_multi_kernel = update_cell_values_multi(self.float_dtype)
-    
+
+        print('Arrays Finalized')
     def struct_member_to_array(self,member = 'mass_fluxes',struct = 'cells'):
         if struct == 'cells':
             struct_ = self.cell_struct
@@ -256,7 +257,7 @@ class FVM():
         if isinstance(output_index,str):
             output_index = self.fields[output_index].index
 
-        wp.launch(explicit_relax,dim = self.num_cells, inputs = [self.cell_values,new_value,alpha,output_index])
+        wp.launch(explicit_relax,dim = self.num_cells, inputs = [self.cell_values,new_value,self.float_dtype(alpha),output_index])
 
     def calculate_mass_flux(self):
         # self.mesh_ops.calculate_mass_flux(self.mass_fluxes,self.face_values,self.cells,self.faces)
@@ -376,7 +377,7 @@ def update_cell_values_multi(float_dtype):
 
 
 @wp.kernel
-def explicit_relax(cell_values:wp.array2d(dtype=Any),new_value:wp.array(dtype=Any),alpha:float,global_output_index:int):
+def explicit_relax(cell_values:wp.array2d(dtype=Any),new_value:wp.array(dtype=Any),alpha:Any,global_output_index:int):
     i = wp.tid()
-    cell_values[i,global_output_index] = alpha*new_value[i] + (1.-alpha)*cell_values[i,global_output_index] 
+    cell_values[i,global_output_index] = alpha*new_value[i] + (cell_values.dtype(1.)-alpha)*cell_values[i,global_output_index] 
 

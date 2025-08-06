@@ -72,16 +72,16 @@ def calculate_BSR_values_kernel(bsr_rows:wp.array(dtype=int),
     if row == col:
         for face_idx in range(owner_cell.faces.length):
             # if owner_cell.neighbors[face_idx] != -1: # So not boundary
-            wp.atomic_add(values,i, scale*weights[cell_id,face_idx,output,0])
+            wp.atomic_add(values,i, values.dtype(scale)*weights[cell_id,face_idx,output,0])
     else: # Off Diagonal
         face_idx = get_face_idx(owner_cell.neighbors,neighbor_id)
         if face_idx != -1:    
-            wp.atomic_add(values,i, scale*weights[cell_id,face_idx,output,1])
+            wp.atomic_add(values,i, values.dtype(scale)*weights[cell_id,face_idx,output,1])
 
 
 
 @wp.kernel
-def _calculate_RHS_values_kernel(b:wp.array(dtype=Any),
+def calculate_RHS_values_kernel(b:wp.array(dtype=Any),
                                 boundary_face_ids:wp.array(dtype= int),
                                 face_structs:wp.array(dtype=Any ),
                                 weights:wp.array4d(dtype= Any ),
@@ -97,7 +97,7 @@ def _calculate_RHS_values_kernel(b:wp.array(dtype=Any),
     row = cell_id*output_indices.shape[0] +output_idx
 
     # wp.atomic_add(b,row,weights[cell_id,face_idx,output].neighbor -  weights[cell_id,face_idx,output].neighbor )
-    wp.atomic_add(b,row,-scale*weights[cell_id,face_idx,output,2] )
+    wp.atomic_add(b,row,-b.dtype(scale)*weights[cell_id,face_idx,output,2] )
 
 
 
@@ -124,7 +124,7 @@ def implicit_relaxation_kernel(bsr_rows:wp.array(dtype=int),
         cell_id = row//num_outputs
         cell_value = cell_values[cell_id,output]
         
-        b[row] +=  (type(alpha)(1.)-alpha)/alpha*values[i]*cell_value
+        b[row] +=  (b.dtype(1.)-alpha)/alpha*values[i]*cell_value
         values[i] = values[i]/alpha
         
 
@@ -180,7 +180,7 @@ for key,(cell_struct,face_struct,node_struct) in CELL_DICT.items():
                                     "weights":wp.array4d(dtype= float_type),
                                     "scale":float_type
                                          })
-    wp.overload(_calculate_RHS_values_kernel,{   "face_structs":wp.array(dtype=face_struct),
+    wp.overload(calculate_RHS_values_kernel,{   "face_structs":wp.array(dtype=face_struct),
                                                 "b":wp.array(dtype= float_type),
                                                 "weights":wp.array4d(dtype= float_type),
                                                 "scale":float_type

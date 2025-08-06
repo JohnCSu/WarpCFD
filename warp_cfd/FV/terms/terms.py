@@ -7,7 +7,7 @@ from typing import Any
 
 class Term:
     weights: wp.array
-    scale: float
+    _scale: float
     global_output_indices: wp.array
     need_global_index:bool
     fields: list[Field]
@@ -54,11 +54,19 @@ class Term:
         self.float_dtype = fv.float_dtype
         self.int_dtype = fv.int_dtype
 
-        self.scale:float = 1.
+        self._scale = self.float_dtype(1.)
         
 
     def set_implicit(self,implicit:bool):
         self._implicit = implicit
+    
+    def set_scale(self,value):
+        self._scale = self.float_dtype(value)
+
+    @property
+    def scale(self):
+        return self._scale
+    
     @property
     def implicit(self):
         '''
@@ -70,7 +78,7 @@ class Term:
         return self
     
     def __neg__(self) -> bool:
-        self.scale = -1.
+        self.set_scale(-1.)
         return self
 
     def __call__(self, fv:FVM,*args, **kwargs: Any) -> Any:
@@ -79,5 +87,5 @@ class Term:
     def calculate_weights(self,fv:FVM,*args, **kwargs: Any) -> Any:
         pass
     
-
+    
     

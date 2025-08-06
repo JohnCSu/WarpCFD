@@ -32,8 +32,6 @@ def bsr_to_coo_array(bsr:sparse.BsrMatrix):
     return sp_sparse.coo_array((bsr.values.numpy(),(bsr.uncompress_rows().numpy(),bsr.columns.numpy())),shape = (bsr.nrow,bsr.ncol))
         
 
-
-
 def mult_by_volume(arr:wp.array,cells:wp.array):
     wp.launch(kernel=mult_by_volume_kernel,dim = cells.shape[0],inputs=[arr,cells])
 

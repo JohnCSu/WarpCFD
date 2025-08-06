@@ -119,7 +119,7 @@ class Equation():
 
             for rhs_term in explicit_terms:
                 assert not rhs_term.implicit
-                self.rhs += rhs_term.scale*rhs_term.weights
+                self.rhs += rhs_term.weights*rhs_term.scale
                 # self.matrix_ops.add_to_RHS(self.rhs,rhs_term.weights,rhs_term.scale)
 
     @staticmethod
@@ -141,7 +141,7 @@ class Equation():
     @staticmethod
     def calculate_Implicit_RHS(b,faces,weights,scale:float,boundary_ids):
         output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int) # Num of outputs as it is C,F,O,3
-        wp.launch(kernel= equation_kernels._calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
+        wp.launch(kernel= equation_kernels.calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
                                                                                                                         boundary_ids,
                                                                                                                         faces,
                                                                                                                         weights,
@@ -152,7 +152,7 @@ class Equation():
 
 
     def add_RHS(self,arr:wp.array,scale = 1.):
-        self.rhs += scale*arr
+        self.rhs += arr*self.float_dtype(scale)
         
 
     def relax(self,relaxation_factor,fvm:FVM = None):
@@ -163,7 +163,7 @@ class Equation():
         if self.rows is None:
             self.rows = self.A.uncompress_rows()
         cols,values = self.A.columns,self.A.values
-        wp.launch(kernel=equation_kernels.implicit_relaxation_kernel,dim = self.rows.shape[0],inputs = [self.rows,cols,values,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices])
+        wp.launch(kernel=equation_kernels.implicit_relaxation_kernel,dim = self.rows.shape[0],inputs = [self.rows,cols,values,self.rhs,fvm.cell_values,self.float_dtype(relaxation_factor),self.global_output_indices])
         # matrix_ops.implicit_relaxation(self.A,self.rhs,fvm.cell_values,relaxation_factor,self.global_output_indices,self.rows)
 
     
