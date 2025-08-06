@@ -7,6 +7,7 @@ from warp_cfd.FV.utils import to_vector_array
 
 from warp_cfd.preprocess import Mesh
 import warp_cfd.FV.mesh_structs as Cells
+from warp_cfd.material import Material
 from warp_cfd.FV.boundary.conditions import apply_BC_kernel,set_initial_conditions_kernel
 from warp_cfd.FV.convergence import Convergence
 from warp_cfd.FV.boundary import Boundary
@@ -51,9 +52,10 @@ class FVM():
     '''
     Base Class that takes in class Mesh and creates the appropriate object to form terms
     '''
-    def __init__(self,mesh:Mesh,output_variables = None,density:float = 1000,viscosity:float = 1e-3,float_dtype = wp.float32,int_dtype = wp.int32):
-        self.density = density
-        self.viscosity = viscosity
+    def __init__(self,mesh:Mesh,output_variables = None,float_dtype = wp.float32,int_dtype = wp.int32):
+        
+        self.material = Material()
+
         # self.gridType:str = mesh.gridType
         self.dimension:int = mesh.dimension
         
@@ -134,7 +136,7 @@ class FVM():
             self.internal_face_interpolation_upwind = internal_calculate_face_interpolation_kernel(upwind,self.cell_struct,self.face_struct,self.skew_correction,self.float_dtype)         
             self.init_global_arrays()
             self.finalized = True
-        print('Model Finalized')
+            print('Model Finalized')
         
 
     

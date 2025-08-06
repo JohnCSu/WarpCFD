@@ -5,14 +5,15 @@ from warp.types import vector
 
 @wp.kernel
 def _calculate_rUA_kernel(D_cell:wp.array(dtype=Any),
-                                    Ap:wp.array(dtype=Any),
+                                    Ap:wp.array(dtype=Any),\
+                                    density:Any,
                                     cell_structs:wp.array(dtype=Any)
                                     ):
     i = wp.tid() # By Cells
     # diagonals for a cell in u,v,w are always the same for isotropic viscosity
     D = 3
     row = i*D
-    D_cell[i] = cell_structs[i].volume/Ap[row]
+    D_cell[i] = cell_structs[i].volume/(Ap[row]*density)
 
 
 
@@ -92,7 +93,7 @@ def divFlux(cell_value:wp.array,model):
 
 
 
-def calculate_rUA(Ap:wp.array,cells:wp.array,out:wp.array | None = None):
+def calculate_rUA(Ap:wp.array,density:float,cells:wp.array,out:wp.array | None = None):
 
     '''
     Calculate rUA =  1/ap = V/Ap where Ap is the diagonal coeffecient of the momentum matrix
@@ -105,7 +106,7 @@ def calculate_rUA(Ap:wp.array,cells:wp.array,out:wp.array | None = None):
     
     assert len(Ap.shape) == 1
     
-    wp.launch(_calculate_rUA_kernel,dim = cells.shape[0],inputs= [out,Ap,cells])
+    wp.launch(_calculate_rUA_kernel,dim = cells.shape[0],inputs= [out,Ap,density,cells])
     return out
 
 

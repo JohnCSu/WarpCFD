@@ -15,6 +15,7 @@ Channel Flow for Low Re = 1. Here We test the pressure inlet and outlets conditi
 As the Re is increased, there is more inertia, so it is more difficult to reach convergence with presure inlets and so a lower relaxation factors should be used
 
 '''
+
 if __name__ == '__main__':
     wp.init()
     # wp.clear_kernel_cache()
@@ -24,17 +25,18 @@ if __name__ == '__main__':
     ny = 10
     nx = ny*int(width)# Approximate number of cells in x and y direction
     
-    Re = 100
+    Re = 10
     G,nu = 1,1/Re
     dz =0.1
     pv_mesh = create_2D_grid((0,0,0), nx, ny , width,height,dz = dz,element_type= 'hex',display_mesh= False,save = 'wedge')
     m = Mesh(pv_mesh)
     define_boundary_walls(m)
     
-    model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float64)
+    model = FVM(m,output_variables = ['u','v','w','p'],float_dtype =wp.float32)
 
+    model.material.create_incompressible_newtonian_fluid(viscosity=nu,density=10.)
     model.boundary.pressure_BC('+X', p = 0)
-    model.boundary.pressure_BC('-X',p = 1)
+    model.boundary.pressure_BC('-X',p = 10.)
 
     model.boundary.no_slip_wall('-Y')
     model.boundary.no_slip_wall('+Y')

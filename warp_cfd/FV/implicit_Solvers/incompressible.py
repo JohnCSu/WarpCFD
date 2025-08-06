@@ -29,6 +29,7 @@ class IncompressibleSolver():
         self.u_relaxation_factor = u_relaxation_factor
         self.NUM_INNER_LOOPS = 1
 
+        self.material = model.material
         
         self.HbyA = wp.zeros(shape=(model.num_cells*3),dtype=model.float_dtype)
         # self.grad_P_HbyA = wp.zeros_like(self.vel_array)
@@ -48,6 +49,11 @@ class IncompressibleSolver():
         rUA = self.rUA 
         rUA_faces = self.rUA_faces
 
+
+        inv_density = (1./self.material.density)
+        density = self.material.density
+        kinematic_viscosity = self.material.viscosity/self.material.density
+
         for i in range(num_steps):
             model.set_boundary_conditions()
             model.face_interpolation()
@@ -56,9 +62,10 @@ class IncompressibleSolver():
 
             # intermediate Velocity Step
             convection(model)
-            diffusion(model,viscosity = model.viscosity)
+            diffusion(model,viscosity = kinematic_viscosity)
             grad_P(model)
-            vel_equation.form_system([convection,-diffusion],explicit_terms= -grad_P,fvm = model)
+            vel_equation.form_system([convection,-diffusion],explicit_terms= -inv_density*grad_P,fvm = model)
+            
             # print('u\n',vel_equation.dense[::3,::3])
             vel_equation.relax(self.u_relaxation_factor,model)
             # 
@@ -66,9 +73,9 @@ class IncompressibleSolver():
             # print('v\n',vel_equation.rhs.numpy()[::3])
             Ap = vel_equation.diagonal
             outer_loop_result,HbyA = vel_equation.solve_Axb(HbyA)
-     
-            p_grad = model.get_gradient('p').flatten() 
-            rUA = calculate_rUA(Ap,model.cells,rUA)
+
+            p_grad = model.get_gradient('p').flatten()
+            rUA = calculate_rUA(Ap,density,model.cells,rUA)
             HbyA = get_HbyA(HbyA,rUA,p_grad)
 
             rUA_faces = interpolate_cell_value_to_face(rUA_faces,rUA,model.faces)
