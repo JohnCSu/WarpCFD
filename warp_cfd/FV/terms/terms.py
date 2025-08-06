@@ -4,7 +4,7 @@ from ..field import Field
 
 from warp_cfd.FV.model import FVM
 from typing import Any
-
+import copy
 class Term:
     weights: wp.array
     _scale: float
@@ -74,12 +74,17 @@ class Term:
         '''
         return self._implicit
 
+
+
+
     def __pos__(self):
+        self.set_scale(1.)
         return self
     
     def __neg__(self) -> bool:
-        self.set_scale(-1.)
-        return self
+        shallow_copy_of_Term = copy.copy(self)
+        shallow_copy_of_Term.set_scale(-1.)
+        return shallow_copy_of_Term
 
     def __call__(self, fv:FVM,*args, **kwargs: Any) -> Any:
         self.calculate_weights(fv,*args,**kwargs )
@@ -88,4 +93,14 @@ class Term:
         pass
     
     
-    
+    def __mul__(self,value):
+        if isinstance(value,(float,int)):
+            shallow_copy_of_Term = copy.copy(self)
+            shallow_copy_of_Term.set_scale(value)
+            return shallow_copy_of_Term
+        else:
+            return NotImplemented
+        
+    def __rmul__(self,other):
+        return self.__mul__(other)
+
