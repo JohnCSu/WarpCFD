@@ -10,7 +10,12 @@ import pyvista as pv
 
 wp.config.mode = "debug"
 '''
-LDC example for Re = 100 run for 2000 iterations for Hex mesh example. Here Othrogonal correctors are turned off as it is essentially a cartesian grid
+LDC example for Re = 100 run for 2000 iterations for Hex mesh example. 
+
+You can try different elements by changinng the element_type variable in create_2D_grid to 'tet' or 'wedge'
+
+Here Othrogonal correctors are turned off as it is essentially a cartesian grid, but should be turned on for tet and wedge
+
 '''
 if __name__ == '__main__':
     wp.init()
@@ -22,37 +27,31 @@ if __name__ == '__main__':
     G,nu = 1,1/Re
     dz =0.1
     pv_mesh = create_2D_grid((0,0,0), n, n , 1,1,dz = dz,element_type= 'hex',display_mesh= False,save = 'wedge')
-    m = Mesh(pv_mesh,num_outputs=4)
+    m = Mesh(pv_mesh)
     define_boundary_walls(m)
     # IC = np.load(f'benchmark_n{n}.npy')
-    m.set_boundary_value('+X',u = 0,v = 0,w = 0) # No Slip
-    m.set_boundary_value('-X',u = 0,v = 0,w = 0) # No Slip
-    m.set_boundary_value('-Y',u = 0,v = 0,w = 0) # No Slip
-    m.set_boundary_value('+Y',u = 1,v = 0,w = 0) # Velocity Inlet
-
     '''
     Add check that All bf have some fixed value => Boundary IDs should equal same length as boundary faces
     '''
-    m.set_gradient_value('-Z',u=0,v=0,w=0,p=0) # No penetration condition
-    m.set_gradient_value('+Z',u=0,v=0,w=0,p=0) # No penetration condition
-    m.set_gradient_value('+X',p = 0) # No Slip
-    m.set_gradient_value('-X',p = 0) # No Slip
-    m.set_gradient_value('+Y',p = 0) # Velocity Inlet
-    m.set_gradient_value('-Y',p = 0) # Velocity Inlet
     
-    m.set_cell_value(0,p= 0)
-    
-    model = FVM(m,output_variables = ['u','v','w','p'],density = 1.,viscosity= nu,float_dtype =wp.float32)
+    model = FVM(m,output_variables = ['u','v','w','p'],float_dtype =wp.float32)
+    model.material.create_incompressible_newtonian_fluid(viscosity=nu,density=1.)
     model.set_reference_pressure(0,0.)
-    centroids = model.struct_member_to_array('centroid','cells')
+    model.boundary.no_slip_wall('-X')
+    model.boundary.no_slip_wall('+X')
+    model.boundary.no_slip_wall('-Y')
+    model.boundary.velocity_BC('+Y',u = 1,v=0,w=0)
+    model.boundary.slip_wall('+Z')
+    model.boundary.slip_wall('-Z')
 
+    model.finalize()
     solver = IncompressibleSolver(model,0.7,0.3,correction=False)
     solver.run(1000,100)
 
     # exit()
     from matplotlib import pyplot as plt
 
-    velocity = model.cell_values.numpy().reshape(-1,3)
+    velocity = model.cell_values.numpy()[:,0:3].reshape(-1,3)
     p = model.cell_values.numpy()[:,3]
     u = velocity[:,0]
     v = velocity[:,1]

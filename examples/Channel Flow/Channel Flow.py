@@ -10,10 +10,13 @@ import pyvista as pv
 
 wp.config.mode = "debug"
 '''
-Channel Flow for Low Re = 1. Here We test the pressure inlet and outlets conditions
+Channel Flow for Low Re = 1. Here We test the pressure inlet and outlets conditions.
 
-As the Re is increased, there is more inertia, so it is more difficult to reach convergence with presure inlets and so a lower relaxation factors should be used
+As the Re is increased, there is more inertia, so it is more difficult to reach convergence with presure inlets 
+and so a lower relaxation factors are used
 
+Things to note:
+setting: Pin = 10, density = 10 and viscosity = 0.1 is the same as Pin = 1, density = 1, viscosity = 0.01
 '''
 
 if __name__ == '__main__':
