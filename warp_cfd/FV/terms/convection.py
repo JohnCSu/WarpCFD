@@ -6,8 +6,8 @@ from warp_cfd.FV.terms.terms import Term
 from warp_cfd.FV.implicit_Schemes.convectionScheme import central_difference,upwind,upwindLinear
 from warp_cfd.FV.interpolation_Schemes import skew_correction
 class ConvectionTerm(Term):
-    def __init__(self,fv:FVM, field: Field| list[Field],interpolation='upwind',custom_interpolation = None):
-        super().__init__(fv,field,True,True)
+    def __init__(self,fv:FVM, fields: Field| list[Field],interpolation='upwind',custom_interpolation = None):
+        super().__init__(fv,fields, implicit = True, need_global_index = True,cell_based = False)
 
         self.interpolation_functions = {
             'upwind': upwind(fv.float_dtype),

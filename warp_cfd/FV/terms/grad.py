@@ -7,7 +7,7 @@ import warp as wp
 class GradTerm(Term):
     def __init__(self, fv: FVM, field: str ) -> None:
         assert isinstance(field,str), 'grad Term can only be in terms of 1 field string name only'
-        super().__init__(fv, field, implicit= False, need_global_index= True)
+        super().__init__(fv, field, implicit = False, need_global_index = True,cell_based = False)
 
         self.weights = wp.zeros(shape= fv.num_cells*fv.dimension,dtype= self.float_dtype)
 

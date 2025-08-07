@@ -7,7 +7,7 @@ from warp_cfd.FV.terms.terms import Term
 
 class DiffusionTerm(Term):
     def __init__(self,fv:FVM, fields:str | list[str],*,correction=False,custom_interpolation = None,von_neumann = None, dirchlet =None,need_global_index= True):
-        super().__init__(fv,fields,implicit= True,need_global_index = need_global_index)
+        super().__init__(fv,fields, implicit = True, need_global_index = need_global_index,cell_based = False)
         #Define interpolation function
         
         '''Flag to overwrite'''

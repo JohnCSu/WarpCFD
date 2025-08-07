@@ -8,11 +8,13 @@ import copy
 class Term:
     weights: wp.array
     _scale: float
+    _implicit:bool
     global_output_indices: wp.array
     need_global_index:bool
     fields: list[Field]
+    cell_based: bool
 
-    def __init__(self,fv:FVM, fields: str | list[str],implicit,need_global_index:bool) -> None:
+    def __init__(self,fv:FVM, fields: str | list[str],implicit,need_global_index:bool,cell_based:bool) -> None:
         
         self.fields = []
         if need_global_index: # We need to check that the fields given are in the model
@@ -41,14 +43,20 @@ class Term:
         }
 
         self.num_outputs = len(self.fields)
-        self._implicit = implicit
+        self.set_implicit(implicit)
+
+
+        self.cell_based = cell_based
 
         if self.implicit:
-            self.weights = wp.array(shape=(fv.num_cells,fv.faces_per_cell,self.num_outputs,3),dtype=fv.float_dtype)
+            if cell_based: 
+                self.weights = wp.array(shape=(fv.num_cells,1,self.num_outputs,2),dtype=fv.float_dtype)    
+            else:
+                self.weights = wp.array(shape=(fv.num_cells,fv.faces_per_cell,self.num_outputs,3),dtype=fv.float_dtype)
 
+        # Explicit Weight are defined by User
 
-        else:
-            self.global_output_indices = wp.empty(shape = 1,dtype= fv.int_dtype)
+            
         self.need_global_index = need_global_index
         
         self.float_dtype = fv.float_dtype
