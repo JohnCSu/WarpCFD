@@ -31,9 +31,7 @@ python3 -m pip install -e .
 pip install -r requirements.txt
 ```
 
-
-
-# RoadMap (In hopeful order)
+# To Do
 - ~~Implement SIMPLE loop~~  
 - ~~Add Pressure inlet/outlet~~ (Backflow needs to be added)
 - ~~Add And Test Tetra Elements~~
@@ -41,10 +39,25 @@ pip install -r requirements.txt
 - ~~Implement Skewness corrections~~
 - ~~Orthogonal Correctors For Laplacian~~ (No skewness correction)
 
-- Add unsteady flow
-    - Pseudo Transient
-    - PISO
-    - PIMPLE
+- ~~Add unsteady flow~~
+    - ~~Pseudo Transient~~
+    - ~~PISO~~
+    - ~~PIMPLE~~ (Not tested but code set up for it)
+
+As of 8/8/2025:
+
+- Set boundary ids to match pyvista -> Allows direct importing of surface groups from pyvista, and use pyvista tools to generate groups. Pyvista should be able to naturally import groups defined by gmesh and openfoam vtk but this will need to be checked
+- Create a set that contains all boundary faces (dont need to store the ids just indicate 'ALL' is everything)
+- Get Cylinder Example Up and Running
+- Field Output object in model
+- Move arrays in Model to state object.
+- Change the weights found in Diffusion/Convective to size of \[F,O,3\] to better reflect its 'face based' weights and is based on neighbors (i.e we are basically storing 2 copies right now with a more cell based approach)
+- Revamp normal and face area generation
+- wp.indexedarray for zero copy views|slices (useful)
+- How numpy struct access works
+
+
+## Future
 
 - Rendering Results (currently using pyvista)
 
@@ -55,11 +68,6 @@ pip install -r requirements.txt
 - Add Explicit solver
     - Backpropagation capability
 - Mesh module overhaul (spaghetti doesnt begin to describe it)
-
-## Things to add to streamline things (as new Warp tooling comes out)
-- wp.indexedarray for zero copy views|slices (useful)
-- How numpy struct access works
-
 
 ## Far in Future
 - Add LES

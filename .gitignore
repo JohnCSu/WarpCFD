@@ -7,3 +7,12 @@ OtherCFD/*
 *.vtk
 *.geo
 test.py
+ToDo.md
+examples/Cylinder Flow/1_0.vtm
+examples/Cylinder Flow/cylinder_mesh_structured.mesh
+examples/Cylinder Flow/1_0/boundary.vtm
+examples/Cylinder Flow/1_0/internal.vtu
+examples/Cylinder Flow/1_0/boundary/inlet.vtp
+examples/Cylinder Flow/1_0/boundary/obstacle.vtp
+examples/Cylinder Flow/1_0/boundary/outlet.vtp
+examples/Cylinder Flow/1_0/boundary/wall.vtp
