@@ -1,14 +1,14 @@
 import warp as wp
 from warp_cfd.FV import FVM
 import numpy as np
-from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Equation
+from warp_cfd.FV.terms import ConvectionTerm,DiffusionTerm, GradTerm,Equation,DdtTerm
 from warp_cfd.FV.field import Field
 import warp as wp
 from warp_cfd.FV.kernels.solver_kernels import interpolate_cell_value_to_face,calculate_rUA,get_HbyA
 from warp.types import vector
 from warp.optim import linear
 class IncompressibleSolver():
-    def __init__(self,model:FVM,u_relaxation_factor=0.7,p_relaxation_factor = 0.3,correction = False) -> None:
+    def __init__(self,model:FVM,u_relaxation_factor=None,p_relaxation_factor = None,correction = False,steady_state = True) -> None:
         
         if not model.finalized:
             raise ValueError('Please call method model.finalize() before passing model in to solver')
@@ -16,6 +16,12 @@ class IncompressibleSolver():
         
         self.float_dtype = model.float_dtype
         velocity_vars = ['u','v','w']
+
+        self.steady_state = steady_state
+        if not steady_state:
+            self.ddt = DdtTerm(model,velocity_vars)
+
+
         self.convection = ConvectionTerm(model,velocity_vars,'upwind') # We only want velocities
         self.diffusion = DiffusionTerm(model,velocity_vars,correction = correction)
         self.grad_P = GradTerm(model,'p') # P
@@ -63,12 +69,11 @@ class IncompressibleSolver():
         self.NUM_ORTHOGONAL_CORRECTORS = NUM_ORTHOGONAL_CORRECTORS
 
 
-    def run(self,num_steps,steps_per_check = 10):
+    def run(self,steps_per_check = 10):
         model = self.model
-
-        model.finalize()
         convection = self.convection
         diffusion = self.diffusion
+        ddt = self.ddt if not self.steady_state else None
         grad_P = self.grad_P
         p_correction_diffusion = self.p_correction_diffusion
         vel_equation= self.vel_equation
@@ -83,9 +88,10 @@ class IncompressibleSolver():
         density = self.material.density
         kinematic_viscosity = self.material.viscosity/self.material.density
 
-        self.NUM_OUTER_LOOPS = num_steps
-
         for nt in range(self.MAX_TIME_STEPS):
+
+            dt = self.dt
+
             for nOuter_i in range(self.NUM_OUTER_LOOPS):
                 model.set_boundary_conditions()
                 model.face_interpolation()
@@ -96,9 +102,15 @@ class IncompressibleSolver():
                 convection(model)
                 diffusion(model,viscosity = kinematic_viscosity)
                 grad_P(model)
-                vel_equation.form_system([convection,-diffusion],explicit_terms= -inv_density*grad_P,fvm = model)
                 
-                vel_equation.relax(self.u_relaxation_factor,model)
+                if self.steady_state:
+                    vel_equation.form_system([convection,-diffusion],explicit_terms= -inv_density*grad_P,fvm = model)
+                else:
+                    ddt(model,dt = dt)
+                    vel_equation.form_system([ddt,convection,-diffusion],explicit_terms= -inv_density*grad_P,fvm = model)
+
+                if self.u_relaxation_factor is not None:
+                    vel_equation.relax(self.u_relaxation_factor,model)
                 
                 Ap = vel_equation.diagonal
                 outer_loop_result,HbyA = vel_equation.solve_Axb(HbyA)
@@ -127,10 +139,14 @@ class IncompressibleSolver():
                         if model.reference_pressure_cell_id is not None:
                             p_corr_equation.replace_row(model.reference_pressure_cell_id,model.reference_pressure)
                         # print('p\n',p_corr_equation.dense)
-                        inner_loop_result,p_cor = p_corr_equation.solve_Axb()
+                        inner_loop_result,p_new = p_corr_equation.solve_Axb()
 
-                        model.relax(p_cor,alpha = self.p_relaxation_factor, output_index= 3)
-                        
+                        if self.p_relaxation_factor is not None:
+                            model.relax(p_new,alpha = self.p_relaxation_factor, output_index= 3)
+                        else:
+                            model.replace_cell_values('p',p_new)
+
+
                         model.face_interpolation('p')
                         model.calculate_gradients('p')
                         vel_correction = model.get_gradient('p',coeff = rUA).flatten()
@@ -139,16 +155,18 @@ class IncompressibleSolver():
                         # sub_1D_array(HbyA,vel_correction,HbyA)
                         model.replace_cell_values(['u','v','w'],HbyA)
                     
-
-                if nOuter_i % steps_per_check == 0:
-                    print(f'step iter: {nOuter_i}')
+                steps = nOuter_i if self.steady_state else nt
+                if steps % steps_per_check == 0:
+                    print(f'step iter: {steps}')
                     print(f'Outer loop Linear Solve {outer_loop_result} Inner loop solve {inner_loop_result}:')
-                    converged = model.check_convergence(vel_equation.matrix,HbyA,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
+                    converged = model.check_convergence(vel_equation.matrix,HbyA,vel_equation.rhs,div_u,vel_correction.flatten(),p_new)
                     
-                    if converged:
-                        print(f'Run Reached Convergence Criteria at iteration {i}')
-                        return None
-                    
+                    # if converged:
+                    #     print(f'Run Reached Convergence Criteria at iteration {i}')
+                    #     return None
+        
+
+        num_steps = self.NUM_OUTER_LOOPS if self.steady_state else self.MAX_TIME_STEPS
         print(f'MAX ITERATIONS OF {num_steps} REACHED. Terminating')
         print(f'Outer loop Linear Solve {outer_loop_result} Inner loop solve {inner_loop_result}:')
-        converged = model.check_convergence(vel_equation.matrix,HbyA,vel_equation.rhs,div_u,vel_correction.flatten(),p_cor)
+        converged = model.check_convergence(vel_equation.matrix,HbyA,vel_equation.rhs,div_u,vel_correction.flatten(),p_new)

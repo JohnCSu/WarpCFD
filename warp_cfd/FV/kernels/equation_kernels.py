@@ -4,7 +4,7 @@ from warp_cfd.FV.utils import COO_Arrays
 from warp.optim import linear
 import warp.sparse as sparse
 from warp_cfd.FV.mesh_structs import CELL_DICT
-
+from warp.sparse import _bsr_block_index
 
 
 @wp.kernel
@@ -55,15 +55,15 @@ def calculate_BSR_values_kernel(bsr_rows:wp.array(dtype=int),
                         values:wp.array(dtype= Any),
                         cell_structs:wp.array(dtype= Any),
                         weights:wp.array4d(dtype= Any),
-                        output_indices:wp.array(dtype= int),
+                        num_outputs:wp.int32,
                         scale:Any):
     i = wp.tid()
 
     row = bsr_rows[i]
     col = bsr_columns[i]
-    num_outputs = output_indices.shape[0]
     output_idx = wp.mod(row,num_outputs)
-    output = output_indices[output_idx]
+    # output = output_indices[output_idx]
+    output = output_idx
     cell_id = row//num_outputs
     neighbor_id = col//num_outputs
 
@@ -80,12 +80,13 @@ def calculate_BSR_values_kernel(bsr_rows:wp.array(dtype=int),
 
 
 
+
 @wp.kernel
 def calculate_RHS_values_kernel(b:wp.array(dtype=Any),
                                 boundary_face_ids:wp.array(dtype= int),
                                 face_structs:wp.array(dtype=Any ),
                                 weights:wp.array4d(dtype= Any ),
-                                output_indices:wp.array(dtype= int),
+                                num_outputs:wp.int32,
                                 scale:Any):
     
     i,output_idx = wp.tid() #Loop through Boundary faces
@@ -93,11 +94,34 @@ def calculate_RHS_values_kernel(b:wp.array(dtype=Any),
     face_id = boundary_face_ids[i]
     cell_id = face_structs[face_id].adjacent_cells[0]
     face_idx = face_structs[face_id].cell_face_index[0]
-    output = output_indices[output_idx]
-    row = cell_id*output_indices.shape[0] +output_idx
+    # output = output_indices[output_idx]
+    row = cell_id*num_outputs +output_idx
 
     # wp.atomic_add(b,row,weights[cell_id,face_idx,output].neighbor -  weights[cell_id,face_idx,output].neighbor )
-    wp.atomic_add(b,row,-b.dtype(scale)*weights[cell_id,face_idx,output,2] )
+    wp.atomic_add(b,row,-b.dtype(scale)*weights[cell_id,face_idx,output_idx,2] )
+
+
+@wp.kernel
+def add_Implicit_cell_based_term_kernel(bsr_row_offsets:wp.array(dtype=int),
+                        bsr_columns:wp.array(dtype=int),
+                        values:wp.array(dtype= Any),
+                        b:wp.array(dtype=Any),
+                        weights:wp.array3d(dtype= Any),
+                        num_outputs:wp.int32,
+                        scale:Any):
+    row = wp.tid() # Number of rows
+    
+    diag_nnz_idx = _bsr_block_index(row,row,bsr_row_offsets,bsr_columns) # Find Diagonal Value index in NNZ indices
+    
+    
+    cell_id = row//num_outputs
+    output_idx = wp.mod(row,num_outputs)
+    
+    # We only care about diagonals weight[C,O,2]
+    wp.atomic_add(values,diag_nnz_idx,scale*weights[cell_id,output_idx,0])
+    wp.atomic_add(b,row,-scale*weights[cell_id,output_idx,1])
+
+
 
 
 
@@ -149,6 +173,15 @@ def replace_row_kernel(bsr_row_offsets:wp.array(dtype= int),
             bsr_values[nnz_idx] = bsr_values.dtype(0.)
     
     b[row_id] = rhs_values[row_id] # Replace the row with the specified value
+
+
+@wp.kernel
+def get_diagonal_indices_kernel(bsr_row_offsets:wp.array(dtype=wp.int32),
+                                bsr_columns:wp.array(dtype=wp.int32),
+                                diagonal_index:wp.array(dtype=wp.int32)):
+    row = wp.tid()
+    diagonal_index[row] = _bsr_block_index(row,row,bsr_row_offsets,bsr_columns) 
+
 
 
 

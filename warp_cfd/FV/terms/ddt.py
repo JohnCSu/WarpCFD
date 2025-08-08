@@ -14,21 +14,20 @@ class DdtTerm(Term):
         else:
             raise NotImplementedError('Only backwardEuler valid option now')
 
-
-    def calculate_weights(self, fv: FVM,dt : float, *args, **kwargs: Any) -> Any:        
-        wp.launch(self.time_scheme,shape = (fv.num_cells,self.global_output_indices.shape[0]), inputs = [self.float_dtype(dt),fv.cell_values,fv.cells,self.weights,self.global_output_indices])
+    def calculate_weights(self, fv: FVM,dt : float, **kwargs: Any) -> Any:        
+        wp.launch(self.time_scheme,dim = (fv.num_cells,self.global_output_indices.shape[0]), inputs = [self.float_dtype(dt),fv.cell_values,fv.cells,self.weights,self.global_output_indices])
 
 
 
 
 
 @wp.kernel
-def backwards_Euler(dt:Any,cell_values,cell_structs,weights,output_indices):
+def backwards_Euler(dt:Any,cell_values:wp.array2d(dtype = Any),cell_structs:wp.array(dtype= Any),weights:wp.array3d(dtype = Any),output_indices:wp.array(dtype = int)):
     cell_id,output = wp.tid()
     global_var_idx = output_indices[output]
     
 
     Vddt = cell_structs[cell_id].volume/dt
     #C,1,O,3
-    weights[cell_id,0,global_var_idx,0] = Vddt # Cell Based so second column is size 1
-    weights[cell_id,0,global_var_idx,1] = -cell_values[cell_id,global_var_idx]*Vddt # Explicit
+    weights[cell_id,global_var_idx,0] = Vddt # Cell Based so second column is size 1
+    weights[cell_id,global_var_idx,1] = -cell_values[cell_id,global_var_idx]*Vddt # Explicit

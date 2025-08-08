@@ -50,7 +50,7 @@ class Term:
 
         if self.implicit:
             if cell_based: 
-                self.weights = wp.array(shape=(fv.num_cells,1,self.num_outputs,2),dtype=fv.float_dtype)    
+                self.weights = wp.array(shape=(fv.num_cells,self.num_outputs,2),dtype=fv.float_dtype)    
             else:
                 self.weights = wp.array(shape=(fv.num_cells,fv.faces_per_cell,self.num_outputs,3),dtype=fv.float_dtype)
 

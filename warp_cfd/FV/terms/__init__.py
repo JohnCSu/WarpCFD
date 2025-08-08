@@ -3,3 +3,5 @@ from .diffusion import DiffusionTerm
 from .grad import GradTerm
 # from ..field import Field
 from .equation import Equation
+
+from .ddt import DdtTerm

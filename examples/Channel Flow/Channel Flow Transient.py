@@ -47,11 +47,15 @@ if __name__ == '__main__':
     model.boundary.slip_wall('-Z')
     model.boundary.slip_wall('+Z')
     model.finalize()
-    
-    solver = IncompressibleSolver(model,0.3,0.3,correction=False,steady_state= True)
-    solver.set_iterations(2000,1,1)
+    # solver = IncompressibleSolver(model,0.1,0.1,correction=False)
 
-    solver.run(100)
+    solver = IncompressibleSolver(model,None,None,correction=False,steady_state= False)
+    solver.set_time_stepping(1000,1.)
+    solver.set_iterations(1,3,1)
+    solver.run(100)    
+
+    centroids = model.struct_member_to_array('centroid','cells')
+
 
     # exit()
     from matplotlib import pyplot as plt

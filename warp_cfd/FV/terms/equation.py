@@ -34,9 +34,9 @@ class Equation():
         self.linear_solver = solver
         self.max_iter = 500
         if fvm.float_dtype == wp.float32:
-            self.tol = 1.e-6
+            self.tol = 1.e-5
         elif fvm.float_dtype == wp.float64:
-            self.tol = 1.e-9
+            self.tol = 1.e-6
 
         self.initial = True
                 
@@ -82,7 +82,6 @@ class Equation():
         # return sparse.bsr_get_diag(self.A,self._diagonal)
         return sparse.bsr_get_diag(self.A)
     
-
     @property
     def matrix(self):
         '''
@@ -108,11 +107,14 @@ class Equation():
         
             for term in implicit_terms:
                 assert term.implicit
-                assert term.weights.shape[-2] ==  self.num_outputs
-                # fvm.matrix_ops.calculate_BSR_matrix(self.A,fvm.cells,weights,output_indices,rows= self.vel_matrix_rows,flip_sign = True)
-                self.calculate_Implicit_LHS(self.A,fvm.cells,term.weights,term.scale,self.rows)
-                self.calculate_Implicit_RHS(self.rhs,fvm.faces,term.weights,term.scale,fvm.boundary_ids)
-        
+                if term.cell_based:
+                    self.add_Implicit_cell_based_term(self.A,self.rhs,term.weights,term.scale)
+                else: # Face Based I.e. need neighbor information
+                    self.calculate_Implicit_LHS(self.A,fvm.cells,term.weights,term.scale,self.rows)
+                    self.calculate_Implicit_RHS(self.rhs,fvm.faces,term.weights,term.scale,fvm.boundary_ids)
+
+
+
         if explicit_terms is not None:
             if isinstance(explicit_terms,Term):
                 explicit_terms = [explicit_terms]
@@ -128,27 +130,40 @@ class Equation():
             rows = BSR_matrix.uncompress_rows()
         assert rows.shape[0] == BSR_matrix.values.shape[0]
 
-        output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int)
+        num_outputs = weights.shape[2]
         wp.launch(kernel=equation_kernels.calculate_BSR_values_kernel,dim = BSR_matrix.values.shape[0],inputs=[rows,
                                                                                                 BSR_matrix.columns,
                                                                                                 BSR_matrix.values,
                                                                                                 cells,
                                                                                                 weights,
-                                                                                                output_indices,
+                                                                                                num_outputs,
                                                                                                 scale])
 
 
     @staticmethod
     def calculate_Implicit_RHS(b,faces,weights,scale:float,boundary_ids):
-        output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int) # Num of outputs as it is C,F,O,3
-        wp.launch(kernel= equation_kernels.calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],output_indices.shape[0]),inputs = [b,
+        num_outputs = weights.shape[2] #C,F,O,3
+        # output_indices = wp.array([i for i in range(weights.shape[-2])],dtype= int)
+        wp.launch(kernel= equation_kernels.calculate_RHS_values_kernel, dim = (boundary_ids.shape[0],num_outputs),inputs = [b,
                                                                                                                         boundary_ids,
                                                                                                                         faces,
                                                                                                                         weights,
-                                                                                                                        output_indices,
+                                                                                                                        num_outputs,
                                                                                                                         scale,
                 ])
 
+    @staticmethod
+    def add_Implicit_cell_based_term(BSR_matrix:sparse.BsrMatrix, b:wp.array(dtype=float), weights:wp.array3d(dtype= float), scale:float):
+        
+        num_outputs = weights.shape[1]
+        wp.launch(equation_kernels.add_Implicit_cell_based_term_kernel,dim = BSR_matrix.ncol,inputs = [BSR_matrix.offsets,
+                                                                                              BSR_matrix.columns,
+                                                                                              BSR_matrix.values,
+                                                                                              b,
+                                                                                              weights,
+                                                                                              num_outputs,
+                                                                                              scale])
+       
 
 
     def add_RHS(self,arr:wp.array,scale = 1.):
